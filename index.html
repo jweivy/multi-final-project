@@ -103,6 +103,33 @@
   .hint { color: var(--soft); font-size: 12px; font-style: italic;
           padding: 6px 24px 0; }
 
+  /* Custom-equation form, shown below the header when "custom" is active */
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 14px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text],
+  #customForm input[type=number] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none;
+  }
+  #customForm input[type=text]:focus,
+  #customForm input[type=number]:focus { border-color: var(--gold); }
+  #customForm input[type=text] { width: 240px; }
+  #customForm input[type=number] { width: 60px; }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; }
+
   @media (max-width: 720px) {
     .controls { grid-template-columns: 1fr; gap: 14px; }
     .overlay { max-width: 250px; padding: 10px 14px; }
@@ -118,8 +145,21 @@
       <button data-preset="sqrt" class="active">y = √x</button>
       <button data-preset="parabola">y = x² / 2</button>
       <button data-preset="sine">y = sin(x) + 0.2</button>
+      <button data-preset="custom">✏️ custom</button>
     </div>
   </header>
+
+  <div id="customForm">
+    <label>y = </label>
+    <input id="customExpr" type="text" value="x^2 / 2 + 1" placeholder="e.g. sin(x) + 1">
+    <label>from x =</label>
+    <input id="customA" type="number" value="0" step="0.1">
+    <label>to</label>
+    <input id="customB" type="number" value="3" step="0.1">
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e</span>
+  </div>
 
   <div id="scene-wrap">
     <canvas id="scene"></canvas>
@@ -198,6 +238,14 @@ const PRESETS = {
     color: 0xa5e34d,
     gradient: [0x123c1c, 0x4ea83a, 0xdcff7a],
   },
+  custom: {
+    label: 'custom',
+    formula: 'V = ∫ 2π · x · f(x) dx',
+    f: x => 0.5 * x * x + 1,   // placeholder; overwritten by the form
+    a: 0.001, b: 3.0,
+    color: 0xc78aff,
+    gradient: [0x2a1545, 0x8a4ec8, 0xe8c8ff],
+  },
 };
 let N_SHELLS = 24;  // adjustable via density slider
 
@@ -252,6 +300,34 @@ function disposeGroup(group) {
     }
   });
   group.clear();
+}
+
+// Compile a kid-friendly math expression like "x^2 / 2 + sin(x)" into a real
+// JavaScript function. We do two tiny rewrites first (^ → ** and π → pi),
+// then build a function whose body runs `with (Math)` so callers can write
+// `sin(x)` instead of `Math.sin(x)`.
+function compileExpression(raw) {
+  if (!raw || !raw.trim()) throw new Error('expression is empty');
+  let s = raw.trim().toLowerCase();
+  s = s.replace(/π/g, 'pi');
+  s = s.replace(/\^/g, '**');
+  // Disallow bare `=` or `;` to avoid surprise multi-statement bodies
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try {
+    // eslint-disable-next-line no-new-func
+    fn = new Function('x', `with (Math) { return (${s}); }`);
+  } catch (e) {
+    throw new Error('syntax error — check your parentheses and operators');
+  }
+  // Probe a handful of points: must return finite numbers
+  for (const t of [0.01, 0.5, 1, 2]) {
+    const v = fn(t);
+    if (typeof v !== 'number' || !isFinite(v)) {
+      throw new Error(`function gives a non-number at x = ${t}`);
+    }
+  }
+  return fn;
 }
 
 // Sample a 3-stop gradient at parameter t ∈ [0, 1].
@@ -487,6 +563,46 @@ angleSlider.addEventListener('input', e => {
   rebuild();
 });
 
+const customForm = document.getElementById('customForm');
+const customExpr = document.getElementById('customExpr');
+const customA = document.getElementById('customA');
+const customB = document.getElementById('customB');
+const customApply = document.getElementById('customApply');
+const customError = document.getElementById('customError');
+
+function applyCustom() {
+  customError.textContent = '';
+  const exprStr = customExpr.value;
+  const a = parseFloat(customA.value);
+  const b = parseFloat(customB.value);
+  if (!isFinite(a) || !isFinite(b) || b <= a) {
+    customError.textContent = 'need a < b (e.g. a=0, b=3)';
+    return;
+  }
+  let fn;
+  try {
+    fn = compileExpression(exprStr);
+  } catch (e) {
+    customError.textContent = e.message;
+    return;
+  }
+  // Hook the parsed function into the preset and re-render
+  PRESETS.custom.f = fn;
+  PRESETS.custom.a = Math.max(0.0001, a);
+  PRESETS.custom.b = b;
+  PRESETS.custom.label = `y = ${exprStr.trim()}`;
+  PRESETS.custom.formula = `V = ∫ 2π · x · (${exprStr.trim()}) dx,  x ∈ [${a}, ${b}]`;
+  if (activePresetKey === 'custom') {
+    rebuild();
+    frameCamera();
+  }
+}
+
+customApply.addEventListener('click', applyCustom);
+customExpr.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
+customA.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
+customB.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
+
 document.querySelectorAll('.presets button').forEach(b => {
   b.addEventListener('click', () => {
     document.querySelectorAll('.presets button').forEach(x =>
@@ -496,6 +612,12 @@ document.querySelectorAll('.presets button').forEach(b => {
     sweepAngle = 0;
     shellSlider.value = 0;
     angleSlider.value = 0;
+    customForm.classList.toggle('shown', activePresetKey === 'custom');
+    if (activePresetKey === 'custom') {
+      // Make sure the placeholder picks up whatever's in the input
+      applyCustom();
+      customExpr.focus();
+    }
     syncLabels();
     rebuild();
     frameCamera();
