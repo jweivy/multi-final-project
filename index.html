@@ -162,11 +162,11 @@
 
   <div id="customForm">
     <label>y = </label>
-    <input id="customExpr" type="text" value="x^2 / 2 + 1" placeholder="e.g. sin(x) + 1">
+    <input id="customExpr" type="text" value="sin(x)" placeholder="e.g. sin(x) + 1">
     <label>from x =</label>
     <input id="customA" type="number" value="0" step="0.1">
     <label>to</label>
-    <input id="customB" type="number" value="3" step="0.1">
+    <input id="customB" type="number" value="6.28" step="0.1">
     <button id="customApply">apply</button>
     <span id="customError"></span>
     <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e</span>
@@ -180,7 +180,8 @@
       <div class="vol">Volume ≈ <b id="ovVol">80.425</b></div>
       <div class="legend">
         <div><span class="swatch" style="background:#ffd166"></span>2D curve in y=0 plane</div>
-        <div><span class="swatch" id="legendShell" style="background:linear-gradient(90deg,#10243f,#9be0ff)"></span>shell stack (gradient by depth)</div>
+        <div><span class="swatch" id="legendShell" style="background:linear-gradient(90deg,#10243f,#9be0ff)"></span>shell where f(x) ≥ 0 (adds to integral)</div>
+        <div><span class="swatch" style="background:linear-gradient(90deg,#4a1010,#ff7070)"></span>shell where f(x) &lt; 0 (subtracts)</div>
         <div><span class="swatch" style="background:transparent;border:2px solid #ffd166"></span>active shell (gold edges)</div>
         <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>axis of rotation (z)</div>
       </div>
@@ -258,12 +259,17 @@ const PRESETS = {
   custom: {
     label: 'custom',
     formula: 'V = ∫ 2π · x · f(x) dx',
-    f: x => 0.5 * x * x + 1,   // placeholder; overwritten by the form
-    a: 0.001, b: 3.0,
+    f: x => Math.sin(x),       // default shows the +/- shell behavior
+    a: 0.001, b: 6.283,
     color: 0xc78aff,
     gradient: [0x2a1545, 0x8a4ec8, 0xe8c8ff],
   },
 };
+
+// Red ramp used for any shell whose height f(r) < 0 — the part of the
+// integral that subtracts from the total. Always the same red regardless
+// of which preset is active, so the meaning is consistent.
+const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
 let N_SHELLS = 24;  // adjustable via density slider
 
 const canvas = document.getElementById('scene');
@@ -374,21 +380,26 @@ function trapVolume(f, a, b, n = 400) {
 function makeShell(r, h, theta, gradient, isActive, idx, total) {
   const group = new THREE.Group();
   const safeTheta = Math.max(0.0001, Math.min(theta, Math.PI * 2));
+  const isNegative = h < 0;
+  const absH = Math.abs(h);
 
+  // CylinderGeometry needs a positive height; the sign of h is kept in the
+  // translate so the shell drops below z=0 when f(r) is negative.
   const cylGeom = new THREE.CylinderGeometry(
-    r, r, h,
+    r, r, absH,
     Math.max(24, Math.floor(safeTheta / (Math.PI * 2) * 64)),
     1,
     true,
     0, safeTheta
   );
   cylGeom.rotateX(Math.PI / 2);
-  cylGeom.translate(0, 0, h / 2);
+  cylGeom.translate(0, 0, h / 2);  // h/2 places base at z=0 for either sign
 
-  // Sample gradient by shell index — inner shells use start of ramp,
-  // outer shells use end. This makes the stack read as a smooth color sweep.
+  // Negative shells use the red ramp to signal "this part subtracts from the
+  // integral." Positive shells use the preset's own gradient.
+  const ramp = isNegative ? NEGATIVE_GRADIENT : gradient;
   const t = total > 1 ? idx / (total - 1) : 0.5;
-  const baseColor = gradientColor(gradient, t);
+  const baseColor = gradientColor(ramp, t);
   const shellColor = isActive
     ? baseColor.clone().multiplyScalar(1.35)
     : baseColor;
@@ -474,9 +485,12 @@ function rebuild() {
   ]);
   stage.add(new THREE.Line(baseGeom, new THREE.LineBasicMaterial({ color: 0x6a7480 })));
 
-  const zMax = Math.max(...curvePts.map(pt => pt.z)) * 1.15 + 0.2;
+  // Axis line spans the full vertical reach of the function — including
+  // any portion that dips below z=0.
+  const zHi = Math.max(0, ...curvePts.map(pt => pt.z)) * 1.15 + 0.2;
+  const zLo = Math.min(0, ...curvePts.map(pt => pt.z)) * 1.15 - 0.05;
   const axisGeom = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, zMax),
+    new THREE.Vector3(0, 0, zLo), new THREE.Vector3(0, 0, zHi),
   ]);
   axisLine = new THREE.Line(axisGeom, new THREE.LineDashedMaterial({
     color: 0xbbbbbb, dashSize: 0.12, gapSize: 0.07, transparent: true, opacity: 0.7,
@@ -493,7 +507,8 @@ function rebuild() {
 
   for (let i = 0; i < N_SHELLS; i++) {
     const r = radii[i];
-    const h = Math.max(0.001, f(r));
+    const h = f(r);
+    if (Math.abs(h) < 0.0005) continue;  // skip degenerate flat shells
     if (i < completedCount) {
       stage.add(makeShell(r, h, Math.PI * 2, gradient, false, i, N_SHELLS));
     } else if (i === activeIdx && sweepAngle > 0.001) {
@@ -501,7 +516,7 @@ function rebuild() {
     }
   }
 
-  controls.target.set(0, 0, zMax / 2);
+  controls.target.set(0, 0, (zLo + zHi) / 2);
 
   document.getElementById('ovTitle').textContent = p.label;
   document.getElementById('ovFormula').textContent = p.formula;
@@ -515,12 +530,22 @@ function rebuild() {
 
 function frameCamera() {
   const p = PRESETS[activePresetKey];
-  const zMax = p.f(p.b);
+  // Probe a few points to find the true vertical extent — handles
+  // functions that dip below the xy plane.
+  const samples = 24;
+  let zMax = 0, zMin = 0;
+  for (let i = 0; i <= samples; i++) {
+    const x = p.a + (p.b - p.a) * i / samples;
+    const z = p.f(x);
+    if (z > zMax) zMax = z;
+    if (z < zMin) zMin = z;
+  }
   const radius = p.b;
-  const reach = Math.max(radius, zMax);
+  const reach = Math.max(radius, zMax - zMin);
   const dist = reach * 2.0 + 1.5;
-  controls.target.set(0, 0, zMax * 0.5);
-  camera.position.set(dist * 0.7, dist * 0.7, dist * 0.55);
+  const midZ = (zMin + zMax) / 2;
+  controls.target.set(0, 0, midZ);
+  camera.position.set(dist * 0.7, dist * 0.7, midZ + dist * 0.55);
   camera.lookAt(controls.target);
   controls.update();
 }
