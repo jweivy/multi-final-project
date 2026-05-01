@@ -19,7 +19,11 @@
     font-family: Georgia, "Source Serif Pro", serif;
     overflow: hidden;
   }
-  #app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  #app > header { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; }
+  #app > footer { grid-row: 4; }
 
   header {
     display: flex; align-items: center; justify-content: space-between;
@@ -99,6 +103,13 @@
   button.action.ghost { background: transparent; color: var(--soft);
                          border: 1px solid var(--pill-border); }
   button.action.ghost:hover { color: var(--ink); border-color: var(--gold); background: transparent; }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+  .speed-select:hover { border-color: var(--gold); }
 
   .hint { color: var(--soft); font-size: 12px; font-style: italic;
           padding: 6px 24px 0; }
@@ -192,6 +203,12 @@
       </div>
       <div class="button-stack">
         <button class="action" id="playBtn">▶  play</button>
+        <select id="speedSel" class="speed-select" title="play speed">
+          <option value="2.5">🐢 slow</option>
+          <option value="1" selected>normal</option>
+          <option value="0.4">🐇 fast</option>
+          <option value="0.15">⚡ blitz</option>
+        </select>
         <button class="action ghost" id="resetBtn">↺ reset view</button>
       </div>
     </div>
@@ -645,8 +662,9 @@ function play() {
     sweepAngle = 0;
   }
 
-  // Total animation time ~8s regardless of density; floor of 0.3s per shell
-  const perShell = Math.max(0.3, 8 / N_SHELLS);
+  // Speed multiplier from the dropdown — 1 = normal, <1 faster, >1 slower
+  const speedMul = parseFloat(document.getElementById('speedSel').value) || 1;
+  const perShell = Math.max(0.1, 8 / N_SHELLS) * speedMul;
   const speed = (Math.PI * 2) / perShell;
   let last = performance.now();
 
