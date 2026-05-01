@@ -180,7 +180,7 @@
       <div class="vol">Volume ≈ <b id="ovVol">80.425</b></div>
       <div class="legend">
         <div><span class="swatch" style="background:#ffd166"></span>2D curve in y=0 plane</div>
-        <div><span class="swatch" id="legendShell" style="background:linear-gradient(90deg,#10243f,#9be0ff)"></span>shell where f(x) ≥ 0 (adds to integral)</div>
+        <div><span class="swatch" id="legendShell" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>shell where f(x) ≥ 0 (adds to integral)</div>
         <div><span class="swatch" style="background:linear-gradient(90deg,#4a1010,#ff7070)"></span>shell where f(x) &lt; 0 (subtracts)</div>
         <div><span class="swatch" style="background:transparent;border:2px solid #ffd166"></span>active shell (gold edges)</div>
         <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>axis of rotation (z)</div>
@@ -229,47 +229,42 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// Each preset defines a 3-stop gradient (inner → mid → outer shell)
-// so the stack reads as a smooth color ramp from axis outward.
+// Single blue → purple ramp used for every preset's positive shells.
+// Inner (axis-side) shells use the deep navy end, outer shells use the
+// lavender end, so the stack reads as a smooth depth gradient.
+const POSITIVE_GRADIENT = [0x10204a, 0x6750d8, 0xd5cdff];
+
+// Red ramp for any shell with f(r) < 0 — the part of the integral that
+// subtracts from the total. Same red across all presets so the meaning
+// is consistent.
+const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
+
 const PRESETS = {
   sqrt: {
     label: 'y = √x',
     formula: 'V = ∫₀⁴ 2π · x · √x  dx',
     f: x => Math.sqrt(x),
     a: 0.001, b: 4.0,
-    color: 0x5fb0ff,
-    gradient: [0x10243f, 0x3b82d9, 0x9be0ff],
   },
   parabola: {
     label: 'y = x² / 2',
     formula: 'V = ∫₀² 2π · x · (x²/2) dx',
     f: x => 0.5 * x * x,
     a: 0.001, b: 2.0,
-    color: 0xff8a5b,
-    gradient: [0x4a1a0a, 0xe85c2a, 0xffd14d],
   },
   sine: {
     label: 'y = sin(x) + 0.2',
     formula: 'V = ∫₀^π 2π · x · (sin x + 0.2) dx',
     f: x => Math.sin(x) + 0.2,
     a: 0.001, b: Math.PI,
-    color: 0xa5e34d,
-    gradient: [0x123c1c, 0x4ea83a, 0xdcff7a],
   },
   custom: {
     label: 'custom',
     formula: 'V = ∫ 2π · x · f(x) dx',
     f: x => Math.sin(x),       // default shows the +/- shell behavior
     a: 0.001, b: 6.283,
-    color: 0xc78aff,
-    gradient: [0x2a1545, 0x8a4ec8, 0xe8c8ff],
   },
 };
-
-// Red ramp used for any shell whose height f(r) < 0 — the part of the
-// integral that subtracts from the total. Always the same red regardless
-// of which preset is active, so the meaning is consistent.
-const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
 let N_SHELLS = 24;  // adjustable via density slider
 
 const canvas = document.getElementById('scene');
@@ -463,7 +458,8 @@ function rebuild() {
   }
 
   const p = PRESETS[activePresetKey];
-  const { f, a, b, gradient } = p;
+  const { f, a, b } = p;
+  const gradient = POSITIVE_GRADIENT;
 
   const radii = [];
   for (let i = 0; i < N_SHELLS; i++) {
