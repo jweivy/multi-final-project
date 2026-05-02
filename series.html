@@ -651,10 +651,15 @@ function syncOverlay() {
   if (currentTab === 'C' || currentTab === 'D') {
     document.getElementById('ovFormula').textContent = `Tab ${currentTab}: coming soon — see design spec`;
     document.getElementById('ovTabReadout').textContent = '';
-  } else {
-    document.getElementById('ovFormula').textContent = p.formula;
-    document.getElementById('ovTabReadout').textContent = `Order n = ${order}` +
-      (currentTab === 'B' ? `   ·   interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]` : '');
+    return;
+  }
+  document.getElementById('ovFormula').textContent = p.formula;
+  if (currentTab === 'A') {
+    const coeffs = coefficientsAt(currentPreset, center, order);
+    document.getElementById('ovTabReadout').textContent = formatPolynomialReadout(coeffs, center);
+  } else if (currentTab === 'B') {
+    document.getElementById('ovTabReadout').textContent =
+      `n = ${order}   ·   interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]`;
   }
 }
 
@@ -690,6 +695,93 @@ document.getElementById('centerSlider').addEventListener('input', e => {
   document.getElementById('lblCenter').textContent = center.toFixed(2);
   rebuild();
 });
+
+// === Play / reset / custom apply / formula readout ===
+let playTimer = null;
+
+function stopPlay() {
+  if (playTimer) {
+    clearInterval(playTimer);
+    playTimer = null;
+    document.getElementById('playBtn').textContent = '▶  play';
+  }
+}
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playTimer) { stopPlay(); return; }
+  if (currentTab !== 'A') return;
+  document.getElementById('playBtn').textContent = '⏸  pause';
+  const speed = parseFloat(document.getElementById('speedSel').value);
+  const interval = Math.max(60, 220 * speed);
+  let n = 0;
+  const maxN = parseInt(document.getElementById('orderSlider').max, 10);
+  playTimer = setInterval(() => {
+    order = n;
+    document.getElementById('orderSlider').value = String(n);
+    document.getElementById('lblOrder').textContent = String(n);
+    rebuild();
+    n++;
+    if (n > maxN) stopPlay();
+  }, interval);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay();
+  const p = PRESETS[currentPreset];
+  center = p.defaultCenter;
+  document.getElementById('centerSlider').value = String(center);
+  document.getElementById('lblCenter').textContent = center.toFixed(2);
+  rebuild();
+});
+
+document.getElementById('customApply').addEventListener('click', () => {
+  const expr = document.getElementById('customExpr').value;
+  const aVal = parseFloat(document.getElementById('customA').value);
+  const bVal = parseFloat(document.getElementById('customB').value);
+  const errEl = document.getElementById('customError');
+  errEl.textContent = '';
+  try {
+    const fn = compileExpression(expr);
+    PRESETS.custom.f = fn;
+    PRESETS.custom.label = `y = ${expr}`;
+    PRESETS.custom.formula = `custom expression around a = ${center.toFixed(2)}`;
+    PRESETS.custom.defaultA = aVal;
+    PRESETS.custom.defaultB = bVal;
+    coeffCache.clear();
+    if (currentPreset !== 'custom') {
+      document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+      document.querySelector('.presets button[data-preset="custom"]').classList.add('active');
+      currentPreset = 'custom';
+    }
+    rebuild();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+});
+
+function formatPolynomialReadout(coeffs, a) {
+  const terms = [];
+  for (let k = 0; k < coeffs.length; k++) {
+    const c = coeffs[k];
+    if (Math.abs(c) < 1e-9) continue;
+    const absC = Math.abs(c);
+    let xPart;
+    if (k === 0) xPart = '';
+    else if (a === 0) xPart = k === 1 ? 'x' : `x^${k}`;
+    else {
+      const aStr = a >= 0 ? `(x − ${a.toFixed(2)})` : `(x + ${(-a).toFixed(2)})`;
+      xPart = k === 1 ? aStr : `${aStr}^${k}`;
+    }
+    let coef;
+    if (k === 0) coef = absC.toFixed(4);
+    else if (absC === 1) coef = '';
+    else coef = absC.toFixed(4) + '·';
+    const sign = terms.length === 0 ? (c < 0 ? '−' : '') : (c < 0 ? ' − ' : ' + ');
+    terms.push(sign + coef + xPart);
+  }
+  if (terms.length === 0) return '0';
+  return `P${coeffs.length - 1}(x) = ${terms.join('')}`;
+}
 
 function resize() {
   const wrap = document.getElementById('scene-wrap');
