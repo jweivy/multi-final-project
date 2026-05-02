@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Taylor Series · 3D Explorer</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto auto 1fr auto; height: 100%; }
+  #app > header { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #tabBar { grid-row: 3; }
+  #app > #scene-wrap { grid-row: 4; }
+  #app > footer { grid-row: 5; }
+
+  #tabBar {
+    display: flex; gap: 4px;
+    padding: 8px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(14, 17, 22, 0.6);
+  }
+  #tabBar button {
+    background: transparent; color: var(--soft);
+    border: none; border-bottom: 2px solid transparent;
+    padding: 10px 18px;
+    font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+  #tabBar button:hover { color: var(--ink); }
+  #tabBar button.active { color: var(--gold); border-bottom-color: var(--gold); }
+  #tabBar button .sub { color: var(--soft); margin-left: 8px; font-size: 11px; font-style: italic; }
+  #tabBar button.active .sub { color: var(--ink); }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 16px;
+    border-radius: 18px; font-family: inherit; font-size: 14px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #scene-wrap { position: relative; overflow: hidden; }
+  #scene { position: absolute; inset: 0; display: block;
+           width: 100% !important; height: 100% !important; }
+
+  .overlay {
+    position: absolute; top: 18px; left: 22px;
+    pointer-events: none;
+    background: rgba(14, 17, 22, 0.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--pill-border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    max-width: 380px;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 22px; color: var(--ink); font-weight: normal; }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 13px; font-style: italic; margin-bottom: 6px; }
+  .overlay .vol { font-size: 14px; color: #ccc; }
+  .overlay .vol b { color: var(--gold); font-size: 18px; }
+  .overlay .legend { font-size: 12px; color: var(--soft); margin-top: 10px; line-height: 1.6; }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  footer { padding: 14px 24px 18px; border-top: 1px solid var(--pill-border);
+           background: rgba(14, 17, 22, 0.95); }
+  .controls { display: grid;
+              grid-template-columns: 1fr 1fr 1fr auto;
+              gap: 22px; align-items: center; }
+  .button-stack { display: flex; flex-direction: column; gap: 6px; }
+  .slider-block { display: flex; flex-direction: column; gap: 4px; }
+  .slider-block .label-row { display: flex; justify-content: space-between;
+                              font-size: 13px; color: var(--soft); }
+  .slider-block .label-row b { color: var(--ink); font-weight: normal; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 9px 22px; border-radius: 22px;
+    font-family: inherit; font-size: 14px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+    letter-spacing: 0.3px;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost { background: transparent; color: var(--soft);
+                         border: 1px solid var(--pill-border); }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); background: transparent; }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+  .speed-select:hover { border-color: var(--gold); }
+
+  .hint { color: var(--soft); font-size: 12px; font-style: italic;
+          padding: 6px 24px 0; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 14px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text],
+  #customForm input[type=number] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none;
+  }
+  #customForm input[type=text]:focus,
+  #customForm input[type=number]:focus { border-color: var(--gold); }
+  #customForm input[type=text] { width: 180px; }
+  #customForm input[type=number] { width: 60px; }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+
+  @media (max-width: 720px) {
+    .controls { grid-template-columns: 1fr; gap: 14px; }
+    .overlay { max-width: 250px; padding: 10px 14px; }
+    .overlay h2 { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Taylor Series</b> · Explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="sin" class="active">y = sin(x)</button>
+      <button data-preset="cos">y = cos(x)</button>
+      <button data-preset="exp">y = eˣ</button>
+      <button data-preset="ln1p">y = ln(1+x)</button>
+      <button data-preset="oneOver1Minus">y = 1/(1−x)</button>
+      <button data-preset="oneOver1Plus">y = 1/(1+x²)</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>y =</label>
+    <input id="customExpr" type="text" value="sin(x)" placeholder="e.g. exp(x) + sin(x)">
+    <label>x ∈ [</label>
+    <input id="customA" type="number" value="-6.28" step="0.1">
+    <label>,</label>
+    <input id="customB" type="number" value="6.28" step="0.1">
+    <label>]</label>
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e</span>
+  </div>
+
+  <div id="tabBar">
+    <button data-tab="A" class="active">A <span class="sub">building up</span></button>
+    <button data-tab="B">B <span class="sub">error bounds</span></button>
+    <button data-tab="C">C <span class="sub">convergence</span></button>
+    <button data-tab="D">D <span class="sub">center point</span></button>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="scene"></canvas>
+    <div class="overlay">
+      <h2><b id="ovTitle">y = sin(x)</b></h2>
+      <div class="formula" id="ovFormula">Maclaurin series around a = 0</div>
+      <div class="vol" id="ovTabReadout">Order n = 5</div>
+      <div class="legend" id="ovLegend">
+        <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
+        <div><span class="swatch" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>polynomials P₀ … Pₙ (low → high order)</div>
+        <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>center x = a</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="controls">
+      <div class="slider-block">
+        <div class="label-row"><span>Order n</span><b id="lblOrder">5</b></div>
+        <input id="orderSlider" type="range" min="0" max="20" value="5">
+      </div>
+      <div class="slider-block" id="centerBlock">
+        <div class="label-row"><span>Center a</span><b id="lblCenter">0.00</b></div>
+        <input id="centerSlider" type="range" min="-6.28" max="6.28" step="0.01" value="0">
+      </div>
+      <div class="slider-block" id="intervalBlock" style="display:none">
+        <div class="label-row"><span>Interval</span><b id="lblInterval">[−1.5, 1.5]</b></div>
+        <div style="display:flex; gap:6px;">
+          <input id="intervalLoSlider" type="range" min="-6.28" max="0" step="0.01" value="-1.5" style="flex:1">
+          <input id="intervalHiSlider" type="range" min="0" max="6.28" step="0.01" value="1.5" style="flex:1">
+        </div>
+      </div>
+      <div class="button-stack">
+        <button class="action" id="playBtn">▶  play</button>
+        <select id="speedSel" class="speed-select" title="play speed">
+          <option value="2.5">🐢 slow</option>
+          <option value="1" selected>normal</option>
+          <option value="0.4">🐇 fast</option>
+          <option value="0.15">⚡ blitz</option>
+        </select>
+        <button class="action ghost" id="resetBtn">↺ reset view</button>
+      </div>
+    </div>
+    <div class="hint" id="tabHint">drag the order slider — watch each polynomial creep outward from the center until it hugs the curve</div>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Same color tokens as shell.html and washer.html — do not diverge.
+const POSITIVE_GRADIENT = [0x10204a, 0x6750d8, 0xd5cdff];
+const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
+const GOLD = 0xffd166;
+
+const PRESETS = {
+  sin: {
+    label: 'y = sin(x)', formula: 'Maclaurin: x − x³/3! + x⁵/5! − …',
+    f: Math.sin, defaultA: -2 * Math.PI, defaultB: 2 * Math.PI, defaultCenter: 0,
+  },
+  cos: {
+    label: 'y = cos(x)', formula: 'Maclaurin: 1 − x²/2! + x⁴/4! − …',
+    f: Math.cos, defaultA: -2 * Math.PI, defaultB: 2 * Math.PI, defaultCenter: 0,
+  },
+  exp: {
+    label: 'y = eˣ', formula: 'Maclaurin: 1 + x + x²/2! + x³/3! + …',
+    f: Math.exp, defaultA: -3, defaultB: 3, defaultCenter: 0,
+  },
+  ln1p: {
+    label: 'y = ln(1+x)', formula: 'Maclaurin: x − x²/2 + x³/3 − …',
+    f: x => Math.log(1 + x), defaultA: -0.95, defaultB: 3, defaultCenter: 0,
+  },
+  oneOver1Minus: {
+    label: 'y = 1/(1−x)', formula: 'Maclaurin: 1 + x + x² + x³ + …',
+    f: x => 1 / (1 - x), defaultA: -2, defaultB: 0.95, defaultCenter: 0,
+  },
+  oneOver1Plus: {
+    label: 'y = 1/(1+x²)', formula: 'Maclaurin: 1 − x² + x⁴ − …',
+    f: x => 1 / (1 + x * x), defaultA: -3, defaultB: 3, defaultCenter: 0,
+  },
+  custom: {
+    label: 'custom', formula: 'enter your own function',
+    f: Math.sin, defaultA: -2 * Math.PI, defaultB: 2 * Math.PI, defaultCenter: 0,
+  },
+};
+
+let currentPreset = 'sin';
+let currentTab = 'A';
+let center = 0;
+let order = 5;
+let intervalLo = -1.5;
+let intervalHi = 1.5;
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+
+const camera = new THREE.OrthographicCamera(-8, 8, 4, -4, 0.1, 100);
+camera.position.set(0, 0, 10);
+camera.up.set(0, 1, 0);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enableRotate = false;
+controls.screenSpacePanning = true;
+controls.target.set(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+const grid = new THREE.GridHelper(40, 40, 0x2a2f36, 0x1a1d22);
+grid.rotation.x = Math.PI / 2;
+scene.add(grid);
+
+const stage = new THREE.Group();
+scene.add(stage);
+
+function disposeGroup(group) {
+  group.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else obj.material.dispose();
+    }
+  });
+  group.clear();
+}
+
+function compileExpression(raw) {
+  if (raw === undefined || raw === null) throw new Error('expression missing');
+  let s = String(raw).trim().toLowerCase();
+  if (!s) throw new Error('expression is empty');
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try {
+    fn = new Function('x', `with (Math) { return (${s}); }`);
+  } catch (e) {
+    throw new Error('syntax error — check your parentheses and operators');
+  }
+  for (const t of [-0.5, 0.01, 0.5, 1]) {
+    const v = fn(t);
+    if (typeof v !== 'number' || !isFinite(v)) {
+      throw new Error(`function gives a non-number at x = ${t}`);
+    }
+  }
+  return fn;
+}
+
+function gradientColor(stops, t) {
+  t = Math.max(0, Math.min(1, t));
+  const [c0, c1, c2] = stops.map(h => new THREE.Color(h));
+  if (t <= 0.5) return new THREE.Color().lerpColors(c0, c1, t / 0.5);
+  return new THREE.Color().lerpColors(c1, c2, (t - 0.5) / 0.5);
+}
+
+function rebuild() {
+  disposeGroup(stage);
+  if (currentTab === 'A') buildTabA();
+  else if (currentTab === 'B') buildTabB();
+  else placeholderTab(currentTab);
+  syncOverlay();
+}
+
+function placeholderTab(letter) {
+  // Tabs C and D are spec'd but not built yet — leave the stage empty.
+}
+
+function buildTabA() {
+  // Filled in by Task 4.
+}
+
+function buildTabB() {
+  // Filled in by Task 8.
+}
+
+function syncOverlay() {
+  const p = PRESETS[currentPreset];
+  document.getElementById('ovTitle').textContent = p.label;
+  if (currentTab === 'C' || currentTab === 'D') {
+    document.getElementById('ovFormula').textContent = `Tab ${currentTab}: coming soon — see design spec`;
+    document.getElementById('ovTabReadout').textContent = '';
+  } else {
+    document.getElementById('ovFormula').textContent = p.formula;
+    document.getElementById('ovTabReadout').textContent = `Order n = ${order}` +
+      (currentTab === 'B' ? `   ·   interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]` : '');
+  }
+}
+
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPreset = btn.dataset.preset;
+    document.getElementById('customForm').classList.toggle('shown', currentPreset === 'custom');
+    rebuild();
+  });
+});
+
+document.querySelectorAll('#tabBar button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabBar button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTab = btn.dataset.tab;
+    document.getElementById('intervalBlock').style.display = currentTab === 'B' ? '' : 'none';
+    document.getElementById('centerBlock').style.display = currentTab === 'C' ? 'none' : '';
+    rebuild();
+  });
+});
+
+document.getElementById('orderSlider').addEventListener('input', e => {
+  order = parseInt(e.target.value, 10);
+  document.getElementById('lblOrder').textContent = String(order);
+  rebuild();
+});
+
+document.getElementById('centerSlider').addEventListener('input', e => {
+  center = parseFloat(e.target.value);
+  document.getElementById('lblCenter').textContent = center.toFixed(2);
+  rebuild();
+});
+
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h, false);
+  const vSpan = 8;
+  const hSpan = vSpan * (w / h);
+  camera.left = -hSpan / 2;
+  camera.right = hSpan / 2;
+  camera.top = vSpan / 2;
+  camera.bottom = -vSpan / 2;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function tick() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+
+rebuild();
+</script>
+</body>
+</html>
