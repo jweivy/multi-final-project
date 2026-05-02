@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Volumes of Revolution · 3D Explorer</title>
+<title>Calculus · 3D Explorer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Exo:wght@200;300;800;900&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
@@ -49,6 +49,9 @@
   }
   @media (min-width: 880px) {
     .methods { grid-template-columns: 1fr 1fr; }
+  }
+  @media (min-width: 1180px) {
+    .methods { grid-template-columns: repeat(3, 1fr); }
   }
 
   .method-card {
@@ -125,7 +128,7 @@
 <body>
 
 <main>
-  <h1>Volumes of <span class="accent">Revolution.</span></h1>
+  <h1>Calculus, <span class="accent">visualized.</span></h1>
 
   <div class="methods">
     <a class="method-card" href="shell.html" aria-label="Open Shell Method explorer">
@@ -149,6 +152,20 @@
       <div class="meta">
         <h2>Washer <b>method.</b></h2>
         <div class="formula">V = π ∫ (f(x)² − g(x)²) · dx</div>
+        <div class="open">
+          <span>Open</span>
+          <span class="arrow"></span>
+        </div>
+      </div>
+    </a>
+
+    <a class="method-card" href="series.html" aria-label="Open Taylor Series explorer">
+      <div class="frame">
+        <img src="series-preview.png" alt="Polynomial approximations converging on a sine curve" width="1280" height="800">
+      </div>
+      <div class="meta">
+        <h2>Taylor <b>series.</b></h2>
+        <div class="formula">f(x) ≈ Σ fⁿ(a)/n! · (x−a)ⁿ</div>
         <div class="open">
           <span>Open</span>
           <span class="arrow"></span>
