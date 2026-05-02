@@ -398,6 +398,67 @@ function derivAt(presetKey, x, k) {
   else console.warn(`[derivatives] ${pass} passed, ${fail} FAILED`);
 })();
 
+// === Polynomial evaluator + coefficient cache ===
+function taylorPoly(coeffs, a, x) {
+  const dx = x - a;
+  let result = coeffs[coeffs.length - 1];
+  for (let i = coeffs.length - 2; i >= 0; i--) {
+    result = result * dx + coeffs[i];
+  }
+  return result;
+}
+
+const coeffCache = new Map();
+
+function coefficientsAt(presetKey, a, n) {
+  const key = `${presetKey}|${a.toFixed(6)}|${n}`;
+  const hit = coeffCache.get(key);
+  if (hit) return hit;
+  const arr = new Array(n + 1);
+  for (let k = 0; k <= n; k++) {
+    arr[k] = derivAt(presetKey, a, k) / FACTORIAL[k];
+  }
+  coeffCache.set(key, arr);
+  if (coeffCache.size > 500) {
+    const firstKey = coeffCache.keys().next().value;
+    coeffCache.delete(firstKey);
+  }
+  return arr;
+}
+
+(function testTaylor() {
+  const cases = [];
+  const sinCoeffs = coefficientsAt('sin', 0, 5);
+  cases.push(['sin Taylor coeff[0] = 0', sinCoeffs[0], 0, 1e-9]);
+  cases.push(['sin Taylor coeff[1] = 1', sinCoeffs[1], 1, 1e-9]);
+  cases.push(['sin Taylor coeff[3] = -1/6', sinCoeffs[3], -1/6, 1e-9]);
+  cases.push(['sin Taylor coeff[5] = 1/120', sinCoeffs[5], 1/120, 1e-9]);
+  cases.push(['sin P5(0.5) ≈ sin(0.5)', taylorPoly(sinCoeffs, 0, 0.5), Math.sin(0.5), 1e-4]);
+  const expCoeffs = coefficientsAt('exp', 1, 10);
+  cases.push(['exp P10(1) at a=1 = e', taylorPoly(expCoeffs, 1, 1), Math.E, 1e-9]);
+  cases.push(['exp P10(1.5) at a=1 ≈ exp(1.5)',
+              taylorPoly(expCoeffs, 1, 1.5), Math.exp(1.5), 1e-4]);
+  const geomCoeffs = coefficientsAt('oneOver1Minus', 0, 8);
+  cases.push(['1/(1-x) coeff[0] = 1', geomCoeffs[0], 1, 1e-9]);
+  cases.push(['1/(1-x) coeff[5] = 1', geomCoeffs[5], 1, 1e-9]);
+  cases.push(['1/(1-x) P8(0.5) ≈ 2', taylorPoly(geomCoeffs, 0, 0.5), 1 / (1 - 0.5), 1e-2]);
+  const a = coefficientsAt('sin', 0, 5);
+  const b = coefficientsAt('sin', 0, 5);
+  cases.push(['cache returns same array', a === b ? 1 : 0, 1, 0]);
+
+  let pass = 0, fail = 0;
+  for (const [name, actual, expected, tol] of cases) {
+    if (Math.abs(actual - expected) <= tol) {
+      pass++;
+    } else {
+      fail++;
+      console.error(`[taylor FAIL] ${name}: got ${actual}, expected ${expected}`);
+    }
+  }
+  if (fail === 0) console.log(`[taylor] all ${pass} tests passed`);
+  else console.warn(`[taylor] ${pass} passed, ${fail} FAILED`);
+})();
+
 let currentPreset = 'sin';
 let currentTab = 'A';
 let center = 0;
