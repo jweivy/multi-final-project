@@ -545,8 +545,100 @@ function placeholderTab(letter) {
   // Tabs C and D are spec'd but not built yet — leave the stage empty.
 }
 
+// === Plotting helpers ===
+const PLOT_SAMPLES = 400;
+
+function buildPolyline(xs, ys, color, opacity = 1.0) {
+  const points = [];
+  for (let i = 0; i < xs.length; i++) {
+    const y = ys[i];
+    if (!isFinite(y)) continue;
+    points.push(new THREE.Vector3(xs[i], y, 0));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
+  return new THREE.Line(geom, mat);
+}
+
+function sampleX(p) {
+  const xs = new Array(PLOT_SAMPLES);
+  for (let i = 0; i < PLOT_SAMPLES; i++) {
+    xs[i] = p.defaultA + (p.defaultB - p.defaultA) * (i / (PLOT_SAMPLES - 1));
+  }
+  return xs;
+}
+
+// Clip y-values to slightly outside [yMin, yMax] so blow-ups slam into
+// the viewport edge instead of crushing the rest of the scene to a strip.
+function clipY(ys, yMin, yMax) {
+  const span = yMax - yMin;
+  const lo = yMin - 0.1 * span;
+  const hi = yMax + 0.1 * span;
+  return ys.map(y => {
+    if (!isFinite(y)) return NaN;
+    if (y > hi) return hi;
+    if (y < lo) return lo;
+    return y;
+  });
+}
+
+function fitCameraY(yMin, yMax, xMin, xMax) {
+  const xPad = (xMax - xMin) * 0.05;
+  const yPad = (yMax - yMin) * 0.15 + 0.5;
+  const wrap = document.getElementById('scene-wrap');
+  const aspect = wrap.clientWidth / wrap.clientHeight;
+  const ySpan = (yMax - yMin) + 2 * yPad;
+  const xSpan = (xMax - xMin) + 2 * xPad;
+  const vSpan = Math.max(ySpan, xSpan / aspect);
+  const yCenter = (yMin + yMax) / 2;
+  const xCenter = (xMin + xMax) / 2;
+  camera.left = xCenter - (vSpan * aspect) / 2;
+  camera.right = xCenter + (vSpan * aspect) / 2;
+  camera.top = yCenter + vSpan / 2;
+  camera.bottom = yCenter - vSpan / 2;
+  camera.updateProjectionMatrix();
+  controls.target.set(xCenter, yCenter, 0);
+}
+
 function buildTabA() {
-  // Filled in by Task 4.
+  const p = PRESETS[currentPreset];
+  const xs = sampleX(p);
+
+  const trueYs = xs.map(p.f);
+  const finiteYs = trueYs.filter(isFinite);
+  const yMin = Math.min(...finiteYs);
+  const yMax = Math.max(...finiteYs);
+  const trueClipped = clipY(trueYs, yMin, yMax);
+  stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
+
+  for (let k = 0; k <= order; k++) {
+    const coeffs = coefficientsAt(currentPreset, center, k);
+    const polyYs = xs.map(x => taylorPoly(coeffs, center, x));
+    const polyClipped = clipY(polyYs, yMin, yMax);
+    const t = order === 0 ? 1.0 : k / order;
+    const color = gradientColor(POSITIVE_GRADIENT, t);
+    const opacity = 0.55 + 0.45 * t;
+    stage.add(buildPolyline(xs, polyClipped, color, opacity));
+  }
+
+  const centerLineGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(center, yMin - 0.5, 0),
+    new THREE.Vector3(center, yMax + 0.5, 0),
+  ]);
+  const centerLineMat = new THREE.LineDashedMaterial({
+    color: 0x888888, dashSize: 0.15, gapSize: 0.1, opacity: 0.6, transparent: true,
+  });
+  const centerLine = new THREE.Line(centerLineGeom, centerLineMat);
+  centerLine.computeLineDistances();
+  stage.add(centerLine);
+
+  const dotGeom = new THREE.CircleGeometry(0.07, 24);
+  const dotMat = new THREE.MeshBasicMaterial({ color: GOLD });
+  const dot = new THREE.Mesh(dotGeom, dotMat);
+  dot.position.set(center, p.f(center), 0.01);
+  stage.add(dot);
+
+  fitCameraY(yMin, yMax, p.defaultA, p.defaultB);
 }
 
 function buildTabB() {
@@ -622,6 +714,12 @@ function tick() {
 tick();
 
 rebuild();
+
+// Inspection hooks for verification (used by preview_eval, harmless in prod).
+window.__stage = stage;
+window.__camera = camera;
+window.__rebuild = rebuild;
+window.__state = () => ({ currentPreset, currentTab, center, order, intervalLo, intervalHi });
 </script>
 </body>
 </html>
