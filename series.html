@@ -426,6 +426,43 @@ function coefficientsAt(presetKey, a, n) {
   return arr;
 }
 
+// === Lagrange bound ===
+// M = max |f^(n+1)(x)| over [lo, hi]. Closed-form for named presets where
+// it's clean; numeric sample fallback otherwise.
+function maxDerivativeBound(presetKey, n, lo, hi) {
+  if (presetKey === 'sin' || presetKey === 'cos') return 1;
+  if (presetKey === 'exp') return Math.exp(hi);
+  if (presetKey === 'ln1p') {
+    const minOnePlus = Math.min(1 + lo, 1 + hi);
+    if (minOnePlus <= 0) return Infinity;
+    return FACTORIAL[n] / Math.pow(minOnePlus, n + 1);
+  }
+  if (presetKey === 'oneOver1Minus') {
+    const maxX = Math.max(lo, hi);
+    if (maxX >= 1) return Infinity;
+    return FACTORIAL[n + 1] / Math.pow(1 - maxX, n + 2);
+  }
+  const SAMPLES = 200;
+  let m = 0;
+  for (let i = 0; i <= SAMPLES; i++) {
+    const x = lo + (hi - lo) * (i / SAMPLES);
+    const v = Math.abs(derivAt(presetKey, x, n + 1));
+    if (isFinite(v) && v > m) m = v;
+  }
+  return m;
+}
+
+function actualMaxError(presetKey, coeffs, a, lo, hi) {
+  const f = PRESETS[presetKey].f;
+  let m = 0;
+  for (let i = 0; i <= 200; i++) {
+    const x = lo + (hi - lo) * (i / 200);
+    const err = Math.abs(f(x) - taylorPoly(coeffs, a, x));
+    if (isFinite(err) && err > m) m = err;
+  }
+  return m;
+}
+
 (function testTaylor() {
   const cases = [];
   const sinCoeffs = coefficientsAt('sin', 0, 5);
@@ -560,6 +597,30 @@ function buildPolyline(xs, ys, color, opacity = 1.0) {
   return new THREE.Line(geom, mat);
 }
 
+// Triangle-strip fill mesh between two polylines (top, bottom) in xy plane.
+function buildBand(xs, ysTop, ysBottom, color, opacity) {
+  const vertices = [];
+  const indices = [];
+  let idx = 0;
+  for (let i = 0; i < xs.length; i++) {
+    const yt = ysTop[i], yb = ysBottom[i];
+    if (!isFinite(yt) || !isFinite(yb)) continue;
+    vertices.push(xs[i], yt, 0, xs[i], yb, 0);
+    if (idx > 0) {
+      const pT = (idx - 1) * 2, pB = pT + 1, cT = idx * 2, cB = cT + 1;
+      indices.push(pT, pB, cT, cT, pB, cB);
+    }
+    idx++;
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geom.setIndex(indices);
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false,
+  });
+  return new THREE.Mesh(geom, mat);
+}
+
 function sampleX(p) {
   const xs = new Array(PLOT_SAMPLES);
   for (let i = 0; i < PLOT_SAMPLES; i++) {
@@ -660,12 +721,118 @@ function buildTabA() {
 }
 
 function buildTabB() {
-  // Filled in by Task 8.
+  const p = PRESETS[currentPreset];
+  const xs = sampleX(p);
+
+  const trueYs = xs.map(p.f);
+  const finiteYs = trueYs.filter(isFinite);
+  const yMin = Math.min(...finiteYs);
+  const yMax = Math.max(...finiteYs);
+  const trueClipped = clipY(trueYs, yMin, yMax);
+
+  const coeffs = coefficientsAt(currentPreset, center, order);
+  const polyYs = xs.map(x => taylorPoly(coeffs, center, x));
+  const polyClipped = clipY(polyYs, yMin, yMax);
+
+  // Translucent red error band between f(x) and P_n(x).
+  const errColor = new THREE.Color(NEGATIVE_GRADIENT[1]);
+  stage.add(buildBand(xs, trueClipped, polyClipped, errColor, 0.30));
+
+  // Lagrange envelope: dashed red curves at P_n ± M·|x−a|^(n+1)/(n+1)!
+  const M = maxDerivativeBound(currentPreset, order, intervalLo, intervalHi);
+  if (isFinite(M)) {
+    const fact = FACTORIAL[order + 1];
+    const envUpYs = xs.map((x, i) => polyYs[i] + M * Math.pow(Math.abs(x - center), order + 1) / fact);
+    const envDnYs = xs.map((x, i) => polyYs[i] - M * Math.pow(Math.abs(x - center), order + 1) / fact);
+    const envUpClipped = clipY(envUpYs, yMin, yMax);
+    const envDnClipped = clipY(envDnYs, yMin, yMax);
+    const envColor = new THREE.Color(NEGATIVE_GRADIENT[2]);
+    const envMatBase = { color: envColor, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: 0.85 };
+    const envUpGeom = new THREE.BufferGeometry().setFromPoints(
+      xs.map((x, i) => new THREE.Vector3(x, envUpClipped[i], 0)).filter(p => isFinite(p.y))
+    );
+    const envUp = new THREE.Line(envUpGeom, new THREE.LineDashedMaterial(envMatBase));
+    envUp.computeLineDistances();
+    stage.add(envUp);
+    const envDnGeom = new THREE.BufferGeometry().setFromPoints(
+      xs.map((x, i) => new THREE.Vector3(x, envDnClipped[i], 0)).filter(p => isFinite(p.y))
+    );
+    const envDn = new THREE.Line(envDnGeom, new THREE.LineDashedMaterial(envMatBase));
+    envDn.computeLineDistances();
+    stage.add(envDn);
+  }
+
+  // Gold true curve with halo.
+  const haloPoints = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (!isFinite(trueClipped[i])) continue;
+    haloPoints.push(new THREE.Vector3(xs[i], trueClipped[i], -0.005));
+  }
+  stage.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(haloPoints),
+    new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.25 })
+  ));
+  stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
+
+  // Single lavender polynomial.
+  const lavender = gradientColor(POSITIVE_GRADIENT, 1.0);
+  stage.add(buildPolyline(xs, polyClipped, lavender, 1.0));
+
+  // Interval handles: two solid red verticals.
+  const handleColor = NEGATIVE_GRADIENT[1];
+  for (const xPos of [intervalLo, intervalHi]) {
+    const geom = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(xPos, yMin - 0.3, 0),
+      new THREE.Vector3(xPos, yMax + 0.3, 0),
+    ]);
+    stage.add(new THREE.Line(geom, new THREE.LineBasicMaterial({
+      color: handleColor, transparent: true, opacity: 0.5,
+    })));
+  }
+
+  // Dashed center line + anchor dot (same as Tab A).
+  const centerLineGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(center, yMin - 0.5, 0),
+    new THREE.Vector3(center, yMax + 0.5, 0),
+  ]);
+  const centerLine = new THREE.Line(centerLineGeom, new THREE.LineDashedMaterial({
+    color: 0x888888, dashSize: 0.15, gapSize: 0.1, opacity: 0.6, transparent: true,
+  }));
+  centerLine.computeLineDistances();
+  stage.add(centerLine);
+
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.07, 24),
+    new THREE.MeshBasicMaterial({ color: GOLD })
+  );
+  dot.position.set(center, p.f(center), 0.01);
+  stage.add(dot);
+
+  fitCameraY(yMin, yMax, p.defaultA, p.defaultB);
 }
 
 function syncOverlay() {
   const p = PRESETS[currentPreset];
   document.getElementById('ovTitle').textContent = p.label;
+
+  const legend = document.getElementById('ovLegend');
+  if (currentTab === 'A') {
+    legend.innerHTML = `
+      <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
+      <div><span class="swatch" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>polynomials P₀ … Pₙ (low → high order)</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>center x = a</div>
+    `;
+  } else if (currentTab === 'B') {
+    legend.innerHTML = `
+      <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
+      <div><span class="swatch" style="background:#d5cdff"></span>polynomial Pₙ</div>
+      <div><span class="swatch" style="background:#c02a2a;opacity:0.5"></span>actual error f(x) − Pₙ(x)</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>Lagrange bound envelope</div>
+    `;
+  } else {
+    legend.innerHTML = `<div>(coming soon)</div>`;
+  }
+
   if (currentTab === 'C' || currentTab === 'D') {
     document.getElementById('ovFormula').textContent = `Tab ${currentTab}: coming soon — see design spec`;
     document.getElementById('ovTabReadout').textContent = '';
@@ -676,8 +843,20 @@ function syncOverlay() {
     const coeffs = coefficientsAt(currentPreset, center, order);
     document.getElementById('ovTabReadout').textContent = formatPolynomialReadout(coeffs, center);
   } else if (currentTab === 'B') {
-    document.getElementById('ovTabReadout').textContent =
-      `n = ${order}   ·   interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]`;
+    const coeffs = coefficientsAt(currentPreset, center, order);
+    const M = maxDerivativeBound(currentPreset, order, intervalLo, intervalHi);
+    const fact = FACTORIAL[order + 1];
+    const dEdge = Math.max(Math.abs(intervalHi - center), Math.abs(intervalLo - center));
+    const bound = isFinite(M) ? M * Math.pow(dEdge, order + 1) / fact : Infinity;
+    const actual = actualMaxError(currentPreset, coeffs, center, intervalLo, intervalHi);
+    const fmtM = isFinite(M) ? M.toExponential(2) : '∞';
+    const fmtBound = isFinite(bound) ? bound.toExponential(2) : '∞';
+    const fmtActual = actual.toExponential(2);
+    document.getElementById('ovTabReadout').innerHTML =
+      `n = <b>${order}</b> · interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]<br>` +
+      `M = max|f<sup>(${order + 1})</sup>| ≈ <b>${fmtM}</b><br>` +
+      `Lagrange bound at edge: <b>${fmtBound}</b><br>` +
+      `Actual max error: <b>${fmtActual}</b>`;
   }
 }
 
@@ -711,6 +890,25 @@ document.getElementById('orderSlider').addEventListener('input', e => {
 document.getElementById('centerSlider').addEventListener('input', e => {
   center = parseFloat(e.target.value);
   document.getElementById('lblCenter').textContent = center.toFixed(2);
+  rebuild();
+});
+
+function updateIntervalLabel() {
+  document.getElementById('lblInterval').textContent =
+    `[${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]`;
+}
+
+document.getElementById('intervalLoSlider').addEventListener('input', e => {
+  intervalLo = parseFloat(e.target.value);
+  if (intervalLo > center - 0.05) intervalLo = center - 0.05;
+  updateIntervalLabel();
+  rebuild();
+});
+
+document.getElementById('intervalHiSlider').addEventListener('input', e => {
+  intervalHi = parseFloat(e.target.value);
+  if (intervalHi < center + 0.05) intervalHi = center + 0.05;
+  updateIntervalLabel();
   rebuild();
 });
 
