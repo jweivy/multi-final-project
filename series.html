@@ -609,6 +609,15 @@ function buildTabA() {
   const yMin = Math.min(...finiteYs);
   const yMax = Math.max(...finiteYs);
   const trueClipped = clipY(trueYs, yMin, yMax);
+
+  // Halo behind the gold curve to fake stroke weight (linewidth is ignored on most platforms).
+  const haloPoints = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (!isFinite(trueClipped[i])) continue;
+    haloPoints.push(new THREE.Vector3(xs[i], trueClipped[i], -0.005));
+  }
+  const haloMat = new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.25 });
+  stage.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(haloPoints), haloMat));
   stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
 
   for (let k = 0; k <= order; k++) {
@@ -617,7 +626,16 @@ function buildTabA() {
     const polyClipped = clipY(polyYs, yMin, yMax);
     const t = order === 0 ? 1.0 : k / order;
     const color = gradientColor(POSITIVE_GRADIENT, t);
-    const opacity = 0.55 + 0.45 * t;
+    if (k === order && order > 0) {
+      const lavenderHaloPoints = [];
+      for (let i = 0; i < xs.length; i++) {
+        if (!isFinite(polyClipped[i])) continue;
+        lavenderHaloPoints.push(new THREE.Vector3(xs[i], polyClipped[i], -0.004));
+      }
+      const lavenderHaloMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.25 });
+      stage.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lavenderHaloPoints), lavenderHaloMat));
+    }
+    const opacity = 0.5 + 0.5 * t;
     stage.add(buildPolyline(xs, polyClipped, color, opacity));
   }
 
