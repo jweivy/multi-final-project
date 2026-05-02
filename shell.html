@@ -278,7 +278,7 @@ const PRESETS = {
 let N_SHELLS = 24;  // adjustable via density slider
 
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 
 const scene = new THREE.Scene();
@@ -733,6 +733,23 @@ rebuild();
 frameCamera();
 resize();
 tick();
+
+// Test/marketing hook: lets a screenshot script force a render at a given
+// state without depending on the requestAnimationFrame loop staying active
+// (which browsers throttle when the tab/window is backgrounded). Returns
+// the canvas as a base64 PNG string. No-op for normal users.
+window.__captureFrame = (w, h) => {
+  if (w && h) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  return canvas.toDataURL('image/png');
+};
+window.__camera = camera;
+window.__controls = controls;
 </script>
 </body>
 </html>
