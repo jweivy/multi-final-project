@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Washer Method · 3D Explorer</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  #app > header { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; }
+  #app > footer { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 16px;
+    border-radius: 18px; font-family: inherit; font-size: 14px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #scene-wrap { position: relative; overflow: hidden; }
+  #scene { position: absolute; inset: 0; display: block;
+           width: 100% !important; height: 100% !important; }
+
+  .overlay {
+    position: absolute; top: 18px; left: 22px;
+    pointer-events: none;
+    background: rgba(14, 17, 22, 0.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--pill-border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    max-width: 380px;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 22px; color: var(--ink); font-weight: normal; }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 13px; font-style: italic; margin-bottom: 6px; }
+  .overlay .vol { font-size: 14px; color: #ccc; }
+  .overlay .vol b { color: var(--gold); font-size: 18px; }
+  .overlay .legend { font-size: 12px; color: var(--soft); margin-top: 10px; line-height: 1.6; }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  footer { padding: 14px 24px 18px; border-top: 1px solid var(--pill-border);
+           background: rgba(14, 17, 22, 0.95); }
+  .controls { display: grid;
+              grid-template-columns: 1fr 1fr 1fr auto;
+              gap: 22px; align-items: center; }
+  .button-stack { display: flex; flex-direction: column; gap: 6px; }
+  .slider-block { display: flex; flex-direction: column; gap: 4px; }
+  .slider-block .label-row { display: flex; justify-content: space-between;
+                              font-size: 13px; color: var(--soft); }
+  .slider-block .label-row b { color: var(--ink); font-weight: normal; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 9px 22px; border-radius: 22px;
+    font-family: inherit; font-size: 14px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+    letter-spacing: 0.3px;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost { background: transparent; color: var(--soft);
+                         border: 1px solid var(--pill-border); }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); background: transparent; }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+  .speed-select:hover { border-color: var(--gold); }
+
+  .hint { color: var(--soft); font-size: 12px; font-style: italic;
+          padding: 6px 24px 0; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 14px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text],
+  #customForm input[type=number] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none;
+  }
+  #customForm input[type=text]:focus,
+  #customForm input[type=number]:focus { border-color: var(--gold); }
+  #customForm input[type=text] { width: 180px; }
+  #customForm input[type=number] { width: 60px; }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+
+  @media (max-width: 720px) {
+    .controls { grid-template-columns: 1fr; gap: 14px; }
+    .overlay { max-width: 250px; padding: 10px 14px; }
+    .overlay h2 { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Washer Method</b> · 3D Explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="disk-sqrt" class="active">disk: y = √x</button>
+      <button data-preset="disk-parabola">disk: y = x²/2</button>
+      <button data-preset="washer-line-parabola">washer: x vs x²</button>
+      <button data-preset="washer-shifted-sine">washer: sin(x)+1 vs 0.5</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>outer y =</label>
+    <input id="customOuter" type="text" value="sqrt(x) + 0.5" placeholder="e.g. sqrt(x) + 1">
+    <label>inner y =</label>
+    <input id="customInner" type="text" value="0.3" placeholder="0 for disk">
+    <label>x ∈ [</label>
+    <input id="customA" type="number" value="0" step="0.1">
+    <label>,</label>
+    <input id="customB" type="number" value="4" step="0.1">
+    <label>]</label>
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e · inner must satisfy |g(x)| ≤ |f(x)|</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="scene"></canvas>
+    <div class="overlay">
+      <h2><b id="ovTitle">disk: y = √x</b></h2>
+      <div class="formula" id="ovFormula">V = π ∫₀⁴ (√x)² dx</div>
+      <div class="vol">Volume ≈ <b id="ovVol">25.13</b></div>
+      <div class="legend">
+        <div><span class="swatch" style="background:#ffd166"></span>outer curve f(x)</div>
+        <div><span class="swatch" style="background:#ff8b3d"></span>inner curve g(x)</div>
+        <div><span class="swatch" id="legendWasher" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>completed washer</div>
+        <div><span class="swatch" style="background:transparent;border:2px solid #ffd166"></span>active washer (gold edges)</div>
+        <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>axis of rotation (x)</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="controls">
+      <div class="slider-block">
+        <div class="label-row"><span>Washer density</span><b id="lblDensity">24 washers</b></div>
+        <input id="densitySlider" type="range" min="4" max="60" value="24">
+      </div>
+      <div class="slider-block">
+        <div class="label-row"><span>Completed washers</span><b id="lblShells">12 / 24</b></div>
+        <input id="shellSlider" type="range" min="0" max="24" value="12">
+      </div>
+      <div class="slider-block">
+        <div class="label-row"><span>Active washer sweep angle</span><b id="lblAngle">360°</b></div>
+        <input id="angleSlider" type="range" min="0" max="360" value="360">
+      </div>
+      <div class="button-stack">
+        <button class="action" id="playBtn">▶  play</button>
+        <select id="speedSel" class="speed-select" title="play speed">
+          <option value="2.5">🐢 slow</option>
+          <option value="1" selected>normal</option>
+          <option value="0.4">🐇 fast</option>
+          <option value="0.15">⚡ blitz</option>
+        </select>
+        <button class="action ghost" id="resetBtn">↺ reset view</button>
+      </div>
+    </div>
+    <div class="hint">drag to rotate · scroll to zoom · right-click drag to pan · each washer is π·(f² − g²) thin slice perpendicular to the x-axis</div>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Same blue → purple ramp as the shell explorer so the two methods feel
+// like one app. The outer-radius end of each washer reads as deep navy,
+// the lavender end is reserved for far-from-axis washers.
+const POSITIVE_GRADIENT = [0x10204a, 0x6750d8, 0xd5cdff];
+
+// Used when a custom function makes g(x)² > f(x)², which would mean the
+// washer subtracts from the integral — same red language as the shells.
+const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
+
+const ZERO = () => 0;
+
+const PRESETS = {
+  'disk-sqrt': {
+    label: 'disk: y = √x',
+    formula: 'V = π ∫₀⁴ (√x)² dx',
+    f: x => Math.sqrt(x),
+    g: ZERO,
+    a: 0.0001, b: 4.0,
+  },
+  'disk-parabola': {
+    label: 'disk: y = x² / 2',
+    formula: 'V = π ∫₀² (x²/2)² dx',
+    f: x => 0.5 * x * x,
+    g: ZERO,
+    a: 0.0001, b: 2.0,
+  },
+  'washer-line-parabola': {
+    label: 'washer: f = x, g = x²',
+    formula: 'V = π ∫₀¹ (x² − x⁴) dx',
+    f: x => x,
+    g: x => x * x,
+    a: 0.0001, b: 1.0,
+  },
+  'washer-shifted-sine': {
+    label: 'washer: f = sin(x)+1, g = 0.5',
+    formula: 'V = π ∫₀^π ((sin x + 1)² − 0.25) dx',
+    f: x => Math.sin(x) + 1,
+    g: x => 0.5,
+    a: 0.0001, b: Math.PI,
+  },
+  custom: {
+    label: 'custom',
+    formula: 'V = π ∫ (f² − g²) dx',
+    f: x => Math.sqrt(x) + 0.5,
+    g: x => 0.3,
+    a: 0.0001, b: 4.0,
+  },
+};
+let N_SHELLS = 24;
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+scene.fog = new THREE.Fog(0x0e1116, 14, 32);
+
+// For the washer method the axis of revolution IS the x-axis. We orbit
+// around it so the camera up-vector stays world-z and the user sees the
+// stack like a stack of coins lying on a table.
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.up.set(0, 1, 0);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(2, 0, 0);
+
+const hemi = new THREE.HemisphereLight(0xeaf2ff, 0x1a1f28, 0.85);
+hemi.position.set(0, 1, 0);
+scene.add(hemi);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+const camLight = new THREE.DirectionalLight(0xffffff, 0.55);
+camLight.position.set(0.3, 0.5, 1);
+camera.add(camLight);
+scene.add(camera);
+
+// Grid lies in the xz plane — perpendicular to camera-up so it feels like
+// a floor under the stack of washers (not in the slice plane like shells).
+const grid = new THREE.GridHelper(12, 24, 0x2a2f36, 0x1a1d22);
+scene.add(grid);
+
+const axesHelper = new THREE.AxesHelper(0.8);
+axesHelper.material.opacity = 0.55;
+axesHelper.material.transparent = true;
+scene.add(axesHelper);
+
+let axisLine = null;
+
+const stage = new THREE.Group();
+scene.add(stage);
+
+function disposeGroup(group) {
+  group.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else obj.material.dispose();
+    }
+  });
+  group.clear();
+}
+
+function compileExpression(raw) {
+  if (raw === undefined || raw === null) throw new Error('expression missing');
+  let s = String(raw).trim().toLowerCase();
+  if (!s) throw new Error('expression is empty');
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try {
+    fn = new Function('x', `with (Math) { return (${s}); }`);
+  } catch (e) {
+    throw new Error('syntax error — check your parentheses and operators');
+  }
+  for (const t of [0.01, 0.5, 1, 2]) {
+    const v = fn(t);
+    if (typeof v !== 'number' || !isFinite(v)) {
+      throw new Error(`function gives a non-number at x = ${t}`);
+    }
+  }
+  return fn;
+}
+
+function gradientColor(stops, t) {
+  t = Math.max(0, Math.min(1, t));
+  const [c0, c1, c2] = stops.map(h => new THREE.Color(h));
+  if (t <= 0.5) {
+    return new THREE.Color().lerpColors(c0, c1, t / 0.5);
+  } else {
+    return new THREE.Color().lerpColors(c1, c2, (t - 0.5) / 0.5);
+  }
+}
+
+// Volume of revolution around the x-axis with the washer method.
+// Always integrates the SIGNED (f² − g²) so that negative integrands
+// (i.e., g pokes outside f) show up as a negative number — matching how
+// we color those washers red.
+function washerVolume(f, g, a, b, n = 400) {
+  const dx = (b - a) / n;
+  let s = 0;
+  for (let i = 0; i <= n; i++) {
+    const x = a + i * dx;
+    const w = (i === 0 || i === n) ? 0.5 : 1;
+    const fv = f(x), gv = g(x);
+    s += w * Math.PI * (fv * fv - gv * gv);
+  }
+  return s * dx;
+}
+
+// Build a single washer as an annular pie-slice extruded along the x-axis.
+// `theta` is the sweep angle in radians (Math.PI * 2 = full ring). For the
+// active washer this is animated; for completed washers we always pass 2π.
+function makeWasher(xCenter, dx, outerR, innerR, theta, isActive, idx, total, isNegative) {
+  const group = new THREE.Group();
+  const safeTheta = Math.max(0.0001, Math.min(theta, Math.PI * 2));
+  const isFull = safeTheta >= Math.PI * 2 - 0.001;
+  const ro = Math.max(Math.abs(outerR), Math.abs(innerR));
+  const ri = Math.min(Math.abs(outerR), Math.abs(innerR));
+
+  // Build the cross-section in the yz plane (will get extruded along x).
+  // ExtrudeGeometry wants a 2D Shape in xy and extrudes along z, so we
+  // build in xy then rotate the whole thing onto the yz plane.
+  const shape = new THREE.Shape();
+  if (isFull) {
+    shape.absarc(0, 0, ro, 0, Math.PI * 2, false);
+    if (ri > 0.001) {
+      const hole = new THREE.Path();
+      hole.absarc(0, 0, ri, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    }
+  } else {
+    // Pie-slice annulus: outer arc from 0 → θ, then radial inner edge,
+    // then inner arc back from θ → 0, close to start.
+    if (ri > 0.001) {
+      shape.moveTo(ro, 0);
+      shape.absarc(0, 0, ro, 0, safeTheta, false);
+      shape.lineTo(ri * Math.cos(safeTheta), ri * Math.sin(safeTheta));
+      shape.absarc(0, 0, ri, safeTheta, 0, true);
+      shape.lineTo(ro, 0);
+    } else {
+      // Disk (no hole): just a pie slice.
+      shape.moveTo(0, 0);
+      shape.lineTo(ro, 0);
+      shape.absarc(0, 0, ro, 0, safeTheta, false);
+      shape.lineTo(0, 0);
+    }
+  }
+
+  const extrudeSettings = {
+    depth: Math.max(0.0001, dx),
+    bevelEnabled: false,
+    curveSegments: Math.max(24, Math.floor(safeTheta / (Math.PI * 2) * 96)),
+  };
+  const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  // Extrusion runs along +z; rotate so it runs along +x. Then translate
+  // so the slab is centered on `xCenter` along x.
+  geom.rotateY(Math.PI / 2);
+  geom.translate(xCenter - dx / 2, 0, 0);
+
+  const ramp = isNegative ? NEGATIVE_GRADIENT : POSITIVE_GRADIENT;
+  const t = total > 1 ? idx / (total - 1) : 0.5;
+  const baseColor = gradientColor(ramp, t);
+  const shellColor = isActive ? baseColor.clone().multiplyScalar(1.35) : baseColor;
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: shellColor,
+    side: THREE.DoubleSide,
+    roughness: 0.5,
+    metalness: 0.08,
+    flatShading: false,
+    emissive: isActive ? shellColor.clone().multiplyScalar(0.25) : 0x000000,
+  });
+  group.add(new THREE.Mesh(geom, mat));
+
+  // Edge rings only on the active washer — same rule as the shells, to
+  // avoid moiré at high density.
+  if (isActive) {
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0xffd166 });
+    const segs = Math.max(24, Math.floor(safeTheta / (Math.PI * 2) * 96));
+    const buildArc = (R, xPos) => {
+      if (R < 0.001) return null;
+      const pts = [];
+      for (let j = 0; j <= segs; j++) {
+        const tt = (j / segs) * safeTheta;
+        pts.push(new THREE.Vector3(xPos, R * Math.cos(tt), R * Math.sin(tt)));
+      }
+      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeMat);
+    };
+    const xL = xCenter - dx / 2;
+    const xR = xCenter + dx / 2;
+    [xL, xR].forEach(xP => {
+      const a1 = buildArc(ro, xP); if (a1) group.add(a1);
+      const a2 = buildArc(ri, xP); if (a2) group.add(a2);
+    });
+    // Radial seams at sweep start and end if partial
+    if (!isFull) {
+      [0, safeTheta].forEach(tt => {
+        const seam = new THREE.LineBasicMaterial({ color: 0xffd166 });
+        [xL, xR].forEach(xP => {
+          const v = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(xP, ri * Math.cos(tt), ri * Math.sin(tt)),
+            new THREE.Vector3(xP, ro * Math.cos(tt), ro * Math.sin(tt)),
+          ]);
+          group.add(new THREE.Line(v, seam));
+        });
+      });
+    }
+  }
+
+  return group;
+}
+
+let activePresetKey = 'disk-sqrt';
+let shellCount = 12;
+let sweepAngle = Math.PI * 2;
+
+function rebuild() {
+  disposeGroup(stage);
+  if (axisLine) {
+    scene.remove(axisLine);
+    axisLine.geometry.dispose();
+    axisLine.material.dispose();
+    axisLine = null;
+  }
+
+  const p = PRESETS[activePresetKey];
+  const { f, g, a, b } = p;
+  const dx = (b - a) / N_SHELLS;
+
+  // 2D outer curve in the y=0 plane — drawn as a gold tube.
+  const outerPts = [];
+  const innerPts = [];
+  const samples = 160;
+  let zMaxAbs = 0;
+  for (let i = 0; i <= samples; i++) {
+    const x = a + (b - a) * i / samples;
+    const fv = f(x), gv = g(x);
+    outerPts.push(new THREE.Vector3(x, fv, 0));
+    innerPts.push(new THREE.Vector3(x, gv, 0));
+    zMaxAbs = Math.max(zMaxAbs, Math.abs(fv), Math.abs(gv));
+  }
+  const outerCurve = new THREE.CatmullRomCurve3(outerPts);
+  stage.add(new THREE.Mesh(
+    new THREE.TubeGeometry(outerCurve, samples, 0.025, 8, false),
+    new THREE.MeshBasicMaterial({ color: 0xffd166 })
+  ));
+  // Inner curve only drawn if it's not flat-zero (i.e., genuine washer).
+  const innerHasContent = innerPts.some(pt => Math.abs(pt.y) > 0.005);
+  if (innerHasContent) {
+    const innerCurve = new THREE.CatmullRomCurve3(innerPts);
+    stage.add(new THREE.Mesh(
+      new THREE.TubeGeometry(innerCurve, samples, 0.020, 8, false),
+      new THREE.MeshBasicMaterial({ color: 0xff8b3d })
+    ));
+  }
+
+  // Axis of rotation — the x-axis. Span from a−margin to b+margin.
+  const margin = (b - a) * 0.08;
+  const axisGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(a - margin, 0, 0), new THREE.Vector3(b + margin, 0, 0),
+  ]);
+  axisLine = new THREE.Line(axisGeom, new THREE.LineDashedMaterial({
+    color: 0xbbbbbb, dashSize: 0.12, gapSize: 0.07, transparent: true, opacity: 0.7,
+  }));
+  axisLine.computeLineDistances();
+  scene.add(axisLine);
+
+  const atMax = shellCount >= N_SHELLS;
+  const activeIdx = atMax ? N_SHELLS - 1 : shellCount;
+  const completedCount = atMax ? N_SHELLS - 1 : shellCount;
+
+  for (let i = 0; i < N_SHELLS; i++) {
+    const xMid = a + (i + 0.5) * dx;
+    const fv = f(xMid), gv = g(xMid);
+    const fSq = fv * fv, gSq = gv * gv;
+    const integrand = fSq - gSq;
+    if (Math.abs(integrand) < 0.00005) continue;  // skip degenerate slices
+    const isNegative = integrand < 0;
+    const ro = Math.max(Math.abs(fv), Math.abs(gv));
+    const ri = Math.min(Math.abs(fv), Math.abs(gv));
+    if (i < completedCount) {
+      stage.add(makeWasher(xMid, dx, ro, ri, Math.PI * 2, false, i, N_SHELLS, isNegative));
+    } else if (i === activeIdx && sweepAngle > 0.001) {
+      stage.add(makeWasher(xMid, dx, ro, ri, sweepAngle, true, i, N_SHELLS, isNegative));
+    }
+  }
+
+  controls.target.set((a + b) / 2, 0, 0);
+
+  document.getElementById('ovTitle').textContent = p.label;
+  document.getElementById('ovFormula').textContent = p.formula;
+  document.getElementById('ovVol').textContent = washerVolume(f, g, a, b).toFixed(3);
+
+  const [g0, g1, g2] = POSITIVE_GRADIENT.map(h => '#' + h.toString(16).padStart(6, '0'));
+  const sw = document.getElementById('legendWasher');
+  if (sw) sw.style.background = `linear-gradient(90deg, ${g0}, ${g1}, ${g2})`;
+}
+
+function frameCamera() {
+  const p = PRESETS[activePresetKey];
+  const samples = 24;
+  let yMax = 0;
+  for (let i = 0; i <= samples; i++) {
+    const x = p.a + (p.b - p.a) * i / samples;
+    yMax = Math.max(yMax, Math.abs(p.f(x)), Math.abs(p.g(x)));
+  }
+  const xRange = p.b - p.a;
+  const reach = Math.max(xRange, yMax * 2);
+  const dist = reach * 1.6 + 1.5;
+  const midX = (p.a + p.b) / 2;
+  controls.target.set(midX, 0, 0);
+  // 3/4 angle: pulled back along +x and +z, lifted on +y so the stack
+  // shows depth. Angle chosen empirically to read clearly on the disk-sqrt
+  // default before any user interaction.
+  camera.position.set(midX + dist * 0.55, dist * 0.55, dist * 0.7);
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
+function resize() {
+  const w = canvas.parentElement.clientWidth;
+  const h = canvas.parentElement.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+function tick() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+const densitySlider = document.getElementById('densitySlider');
+const shellSlider = document.getElementById('shellSlider');
+const angleSlider = document.getElementById('angleSlider');
+const lblDensity = document.getElementById('lblDensity');
+const lblShells = document.getElementById('lblShells');
+const lblAngle = document.getElementById('lblAngle');
+const playBtn = document.getElementById('playBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+function syncLabels() {
+  lblDensity.textContent = `${N_SHELLS} washers`;
+  lblShells.textContent = `${shellCount} / ${N_SHELLS}`;
+  const deg = Math.round(sweepAngle * 180 / Math.PI);
+  lblAngle.textContent = `${deg}°`;
+}
+
+densitySlider.addEventListener('input', e => {
+  const newN = +e.target.value;
+  const ratio = N_SHELLS > 0 ? shellCount / N_SHELLS : 0.5;
+  N_SHELLS = newN;
+  shellCount = Math.min(N_SHELLS, Math.round(ratio * N_SHELLS));
+  shellSlider.max = N_SHELLS;
+  shellSlider.value = shellCount;
+  syncLabels();
+  rebuild();
+});
+
+shellSlider.addEventListener('input', e => {
+  shellCount = +e.target.value;
+  syncLabels();
+  rebuild();
+});
+
+angleSlider.addEventListener('input', e => {
+  sweepAngle = (+e.target.value / 360) * Math.PI * 2;
+  syncLabels();
+  rebuild();
+});
+
+const customForm = document.getElementById('customForm');
+const customOuter = document.getElementById('customOuter');
+const customInner = document.getElementById('customInner');
+const customA = document.getElementById('customA');
+const customB = document.getElementById('customB');
+const customApply = document.getElementById('customApply');
+const customError = document.getElementById('customError');
+
+function applyCustom() {
+  customError.textContent = '';
+  const a = parseFloat(customA.value);
+  const b = parseFloat(customB.value);
+  if (!isFinite(a) || !isFinite(b) || b <= a) {
+    customError.textContent = 'need a < b';
+    return;
+  }
+  let fn, gn;
+  try { fn = compileExpression(customOuter.value); }
+  catch (e) { customError.textContent = 'outer: ' + e.message; return; }
+  try { gn = compileExpression(customInner.value); }
+  catch (e) { customError.textContent = 'inner: ' + e.message; return; }
+  PRESETS.custom.f = fn;
+  PRESETS.custom.g = gn;
+  PRESETS.custom.a = Math.max(0.0001, a);
+  PRESETS.custom.b = b;
+  PRESETS.custom.label = `washer: f = ${customOuter.value.trim()}, g = ${customInner.value.trim()}`;
+  PRESETS.custom.formula = `V = π ∫ ((${customOuter.value.trim()})² − (${customInner.value.trim()})²) dx,  x ∈ [${a}, ${b}]`;
+  if (activePresetKey === 'custom') {
+    rebuild();
+    frameCamera();
+  }
+}
+
+customApply.addEventListener('click', applyCustom);
+[customOuter, customInner, customA, customB].forEach(inp => {
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
+});
+
+document.querySelectorAll('.presets button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.presets button').forEach(x =>
+      x.classList.toggle('active', x === b));
+    activePresetKey = b.dataset.preset;
+    shellCount = 0;
+    sweepAngle = 0;
+    shellSlider.value = 0;
+    angleSlider.value = 0;
+    customForm.classList.toggle('shown', activePresetKey === 'custom');
+    if (activePresetKey === 'custom') {
+      applyCustom();
+      customOuter.focus();
+    }
+    syncLabels();
+    rebuild();
+    frameCamera();
+  });
+});
+
+resetBtn.addEventListener('click', () => { frameCamera(); });
+
+let playState = { running: false, raf: 0 };
+
+function play() {
+  if (playState.running) {
+    playState.running = false;
+    cancelAnimationFrame(playState.raf);
+    playBtn.textContent = '▶  play';
+    return;
+  }
+  playState.running = true;
+  playBtn.textContent = '⏸  pause';
+
+  if (shellCount >= N_SHELLS) {
+    shellCount = 0;
+    sweepAngle = 0;
+  }
+
+  const speedMul = parseFloat(document.getElementById('speedSel').value) || 1;
+  const perShell = Math.max(0.1, 8 / N_SHELLS) * speedMul;
+  const speed = (Math.PI * 2) / perShell;
+  let last = performance.now();
+
+  function step(now) {
+    if (!playState.running) return;
+    const dt = (now - last) / 1000;
+    last = now;
+    sweepAngle += speed * dt;
+    if (sweepAngle >= Math.PI * 2) {
+      sweepAngle = 0;
+      shellCount = Math.min(N_SHELLS, shellCount + 1);
+      if (shellCount >= N_SHELLS) {
+        playState.running = false;
+        playBtn.textContent = '↻  replay';
+        shellSlider.value = shellCount;
+        angleSlider.value = 0;
+        syncLabels();
+        rebuild();
+        return;
+      }
+    }
+    shellSlider.value = shellCount;
+    angleSlider.value = Math.round(sweepAngle * 180 / Math.PI);
+    syncLabels();
+    rebuild();
+    playState.raf = requestAnimationFrame(step);
+  }
+  playState.raf = requestAnimationFrame(step);
+}
+
+playBtn.addEventListener('click', play);
+
+syncLabels();
+rebuild();
+frameCamera();
+resize();
+tick();
+</script>
+</body>
+</html>
