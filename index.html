@@ -4,133 +4,45 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Volumes of Revolution · 3D Explorer</title>
-<meta name="description" content="An interactive 3D explorer for the shell and washer methods. Pick a curve, watch the solid get built up one slice at a time.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Exo:wght@200;300;400;600;800;900&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo:wght@200;300;800;900&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0a0c0f;
-    --bg-soft: #11141a;
     --bg-card: #0f1218;
     --ink: #f4f1e8;
     --ink-dim: #b8b3a4;
     --soft: #6f7783;
     --rule: #1a1f27;
-    --rule-strong: #2a313c;
     --gold: #ffd166;
-    --gold-soft: #f4c860;
-    --shell-tint: #6750d8;
-    --washer-tint: #4ea88a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
   body {
     background: var(--bg); color: var(--ink);
     font-family: 'Exo', 'Helvetica Neue', sans-serif;
     font-weight: 300; line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex; flex-direction: column;
   }
   ::selection { background: var(--gold); color: var(--bg); }
 
-  .mono { font-family: 'Roboto Mono', monospace; }
-
-  /* ────────────────────────── top rail ────────────────────────── */
-  .rail {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 22px max(28px, 5vw);
-    border-bottom: 1px solid var(--rule);
-    font-family: 'Roboto Mono', monospace;
-    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
-    color: var(--soft);
-  }
-  .rail .mark { color: var(--ink); display: flex; align-items: center; gap: 10px; }
-  .rail .mark .dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--gold);
-    box-shadow: 0 0 12px rgba(255,209,102,0.6);
-  }
-  .rail .meta { display: flex; gap: 28px; }
-  .rail .meta span b { color: var(--ink); font-weight: 500; }
-  @media (max-width: 720px) {
-    .rail .meta { display: none; }
+  main {
+    flex: 1; display: flex; flex-direction: column;
+    max-width: 1280px; width: 100%; margin: 0 auto;
+    padding: clamp(40px, 8vw, 96px) max(28px, 5vw);
+    gap: clamp(48px, 8vw, 96px);
   }
 
-  /* ────────────────────────── hero ────────────────────────── */
-  .hero {
-    padding: clamp(56px, 12vw, 140px) max(28px, 5vw) clamp(40px, 8vw, 80px);
-    position: relative;
-    border-bottom: 1px solid var(--rule);
-  }
-  .hero::before {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background:
-      radial-gradient(900px 480px at 18% 0%, rgba(103, 80, 216, 0.18), transparent 60%),
-      radial-gradient(700px 460px at 92% 80%, rgba(78, 168, 138, 0.12), transparent 60%);
-  }
-  .hero-grid {
-    position: relative; max-width: 1280px; margin: 0 auto;
-    display: grid; grid-template-columns: 1fr; gap: 40px;
-  }
-  .eyebrow {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
-    color: var(--gold); display: flex; align-items: center; gap: 14px;
-  }
-  .eyebrow::before { content: ""; width: 36px; height: 1px; background: var(--gold); display: inline-block; }
-
-  .display {
+  h1 {
     font-family: 'Exo', sans-serif;
-    font-size: clamp(56px, 11vw, 168px);
-    font-weight: 900; line-height: 0.92; letter-spacing: -0.04em;
-    margin-top: 24px; color: var(--ink);
+    font-size: clamp(48px, 10vw, 140px);
+    font-weight: 900; line-height: 0.95; letter-spacing: -0.04em;
+    color: var(--ink);
   }
-  .display .accent {
-    font-style: italic; font-weight: 200; color: var(--gold);
-  }
-  .display .small {
-    display: block; font-size: 0.42em; font-weight: 300; letter-spacing: -0.01em;
-    color: var(--ink-dim); margin-top: 18px; line-height: 1.1;
-  }
-
-  .hero-meta {
-    display: grid; grid-template-columns: 1fr; gap: 36px;
-    border-top: 1px solid var(--rule); padding-top: 36px; margin-top: 14px;
-  }
-  @media (min-width: 800px) {
-    .hero-meta { grid-template-columns: 1.4fr 1fr 1fr; }
-  }
-  .hero-meta .lede {
-    font-size: clamp(16px, 1.3vw, 19px); line-height: 1.6;
-    color: var(--ink-dim); max-width: 56ch;
-  }
-  .hero-meta dl { font-family: 'Roboto Mono', monospace; font-size: 12px; }
-  .hero-meta dt {
-    color: var(--soft); letter-spacing: 0.18em; text-transform: uppercase;
-    font-size: 10px; margin-bottom: 8px;
-  }
-  .hero-meta dd { color: var(--ink); font-size: 14px; line-height: 1.6; }
-
-  /* ────────────────────────── methods grid ────────────────────────── */
-  .section {
-    max-width: 1280px; margin: 0 auto;
-    padding: clamp(56px, 9vw, 100px) max(28px, 5vw) clamp(56px, 9vw, 120px);
-  }
-  .section-head {
-    display: flex; align-items: baseline; justify-content: space-between;
-    gap: 20px; flex-wrap: wrap;
-    border-bottom: 1px solid var(--rule); padding-bottom: 24px; margin-bottom: 48px;
-  }
-  .section-head h2 {
-    font-family: 'Exo', sans-serif; font-weight: 200; font-size: clamp(22px, 2.4vw, 30px);
-    letter-spacing: -0.01em;
-  }
-  .section-head h2 b { font-weight: 800; color: var(--gold); }
-  .section-head .count {
-    font-family: 'Roboto Mono', monospace; color: var(--soft);
-    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
-  }
+  h1 .accent { font-style: italic; font-weight: 200; color: var(--gold); }
 
   .methods {
     display: grid; grid-template-columns: 1fr; gap: clamp(20px, 2.5vw, 32px);
@@ -156,237 +68,95 @@
 
   .method-card .frame {
     aspect-ratio: 16 / 10;
-    position: relative; overflow: hidden;
+    overflow: hidden;
     border-bottom: 1px solid var(--rule);
     background: #07090c;
   }
   .method-card .frame img {
     width: 100%; height: 100%; object-fit: cover; display: block;
-    transition: transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 400ms ease;
-    filter: saturate(1.05);
+    transition: transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .method-card:hover .frame img { transform: scale(1.04); filter: saturate(1.15) brightness(1.05); }
-
-  .frame .frame-tags {
-    position: absolute; top: 14px; left: 14px; right: 14px;
-    display: flex; align-items: center; justify-content: space-between;
-    font-family: 'Roboto Mono', monospace;
-    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-    color: var(--ink-dim);
-    pointer-events: none;
-  }
-  .frame .frame-tags .index {
-    color: var(--gold); font-weight: 500;
-    background: rgba(10, 12, 15, 0.7);
-    padding: 4px 10px; border: 1px solid rgba(255,209,102,0.4);
-    border-radius: 2px;
-    backdrop-filter: blur(6px);
-  }
-  .frame .frame-tags .axis {
-    color: var(--ink); background: rgba(10, 12, 15, 0.7);
-    padding: 4px 10px; border: 1px solid var(--rule-strong);
-    border-radius: 2px;
-    backdrop-filter: blur(6px);
-  }
+  .method-card:hover .frame img { transform: scale(1.04); }
 
   .method-card .meta {
     padding: clamp(22px, 2.6vw, 32px);
-    display: flex; flex-direction: column; gap: 18px;
+    display: flex; flex-direction: column; gap: 14px;
   }
-  .method-card h3 {
+  .method-card h2 {
     font-family: 'Exo', sans-serif;
-    font-size: clamp(28px, 3.2vw, 42px); font-weight: 800;
-    letter-spacing: -0.025em; line-height: 1;
+    font-size: clamp(26px, 3vw, 38px); font-weight: 800;
+    letter-spacing: -0.02em; line-height: 1;
   }
-  .method-card h3 b { font-weight: 200; font-style: italic; color: var(--gold); }
-
+  .method-card h2 b { font-weight: 200; font-style: italic; color: var(--gold); }
   .method-card .formula {
     font-family: 'Roboto Mono', monospace;
-    font-size: 13px; color: var(--ink-dim); line-height: 1.6;
-    padding: 12px 14px; border: 1px solid var(--rule);
-    border-radius: 2px; background: rgba(255,255,255,0.015);
-    display: inline-block;
+    font-size: 13px; color: var(--ink-dim); line-height: 1.5;
   }
-  .method-card p {
-    font-size: 15px; line-height: 1.65; color: var(--ink-dim);
-    max-width: 50ch;
-  }
-  .method-card p em {
-    color: var(--gold); font-style: italic; font-weight: 400;
-  }
-
-  .method-card .specs {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 16px; padding-top: 18px; border-top: 1px solid var(--rule);
-    font-family: 'Roboto Mono', monospace;
-  }
-  .method-card .specs > div { display: flex; flex-direction: column; gap: 4px; }
-  .method-card .specs dt {
-    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--soft);
-  }
-  .method-card .specs dd { font-size: 13px; color: var(--ink); }
 
   .method-card .open {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 6px; font-family: 'Roboto Mono', monospace;
-    font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
+    margin-top: 4px; display: flex; align-items: center; justify-content: space-between;
+    padding-top: 16px; border-top: 1px solid var(--rule);
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
     color: var(--ink); transition: color 220ms ease;
   }
   .method-card .open .arrow {
-    width: 36px; height: 1px; background: var(--soft);
-    position: relative; transition: width 220ms ease, background 220ms ease;
+    width: 36px; height: 1px; background: var(--soft); position: relative;
+    transition: width 220ms ease, background 220ms ease;
   }
   .method-card .open .arrow::after {
     content: ""; position: absolute; right: -1px; top: -3px;
     width: 7px; height: 7px;
     border-top: 1px solid var(--soft); border-right: 1px solid var(--soft);
-    transform: rotate(45deg);
-    transition: border-color 220ms ease;
+    transform: rotate(45deg); transition: border-color 220ms ease;
   }
   .method-card:hover .open { color: var(--gold); }
   .method-card:hover .open .arrow { width: 56px; background: var(--gold); }
   .method-card:hover .open .arrow::after { border-color: var(--gold); }
 
-  /* ────────────────────────── footer ────────────────────────── */
-  footer {
-    border-top: 1px solid var(--rule);
-    padding: 36px max(28px, 5vw);
-    display: flex; align-items: center; justify-content: space-between;
-    flex-wrap: wrap; gap: 20px;
-    font-family: 'Roboto Mono', monospace;
-    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--soft);
-  }
-  footer a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); transition: border-color 200ms ease, color 200ms ease; }
-  footer a:hover { color: var(--gold); border-bottom-color: var(--gold); }
-
-  /* reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
-      animation-duration: 0ms !important;
       transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
     }
   }
-
-  /* fade-in on load */
-  .reveal { opacity: 0; transform: translateY(14px); animation: rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-  .reveal.d1 { animation-delay: 60ms; }
-  .reveal.d2 { animation-delay: 180ms; }
-  .reveal.d3 { animation-delay: 320ms; }
-  .reveal.d4 { animation-delay: 460ms; }
-  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
 
-<div class="rail">
-  <div class="mark"><span class="dot"></span>VOLUMES · 3D EXPLORER</div>
-  <div class="meta">
-    <span>VERSION <b>0.2</b></span>
-    <span>STACK <b>THREE.JS</b></span>
-    <span>2026 / MAY</span>
-  </div>
-</div>
-
-<section class="hero">
-  <div class="hero-grid">
-    <div class="reveal d1">
-      <div class="eyebrow">Multivariable · Final Project</div>
-      <h1 class="display">
-        Volumes of<br>
-        <span class="accent">Revolution.</span>
-        <span class="small">A 3D explorer for the shell and washer methods, built for kids who&nbsp;learn&nbsp;by&nbsp;turning&nbsp;things&nbsp;over&nbsp;in&nbsp;their&nbsp;hands.</span>
-      </h1>
-    </div>
-
-    <div class="hero-meta reveal d2">
-      <p class="lede">
-        Pick a curve. Pick a method. Watch the solid get built up one
-        slice at a time, and see exactly where the integral comes from —
-        not as a formula, but as a thing you can grab and rotate.
-      </p>
-      <dl>
-        <dt>Methods</dt>
-        <dd>Cylindrical&nbsp;Shells<br>Disks &amp; Washers</dd>
-      </dl>
-      <dl>
-        <dt>Built for</dt>
-        <dd>Calc&nbsp;II / AP&nbsp;Calc<br>and the curious</dd>
-      </dl>
-    </div>
-  </div>
-</section>
-
-<section class="section" aria-labelledby="methods-heading">
-  <div class="section-head reveal d3">
-    <h2 id="methods-heading">Two methods, <b>same solid.</b></h2>
-    <span class="count">02 / 02</span>
-  </div>
+<main>
+  <h1>Volumes of <span class="accent">Revolution.</span></h1>
 
   <div class="methods">
-    <a class="method-card reveal d3" href="shell.html" aria-label="Open Shell Method explorer">
+    <a class="method-card" href="shell.html" aria-label="Open Shell Method explorer">
       <div class="frame">
-        <img src="shell-preview.png" alt="3D rendering of nested cylindrical shells around the z-axis, with the active shell partially swept" loading="eager" width="1280" height="800">
-        <div class="frame-tags">
-          <span class="index">01 / SHELL</span>
-          <span class="axis">AROUND&nbsp;Z-AXIS</span>
-        </div>
+        <img src="shell-preview.png" alt="3D rendering of nested cylindrical shells" width="1280" height="800">
       </div>
       <div class="meta">
-        <h3>Shell <b>method.</b></h3>
-        <code class="formula">V = ∫ 2π · x · f(x) · dx</code>
-        <p>
-          Wraps the solid in <em>nested cylindrical shells</em>.
-          Each shell's circumference times its height times its
-          thickness equals its volume — sum them and you have the integral.
-        </p>
-        <div class="specs">
-          <div><dt>SHELLS</dt><dd>4 → 60</dd></div>
-          <div><dt>SWEEP</dt><dd>0° → 360°</dd></div>
-          <div><dt>CURVES</dt><dd>3 + custom</dd></div>
-        </div>
+        <h2>Shell <b>method.</b></h2>
+        <div class="formula">V = ∫ 2π · x · f(x) · dx</div>
         <div class="open">
-          <span>Open explorer</span>
+          <span>Open</span>
           <span class="arrow"></span>
         </div>
       </div>
     </a>
 
-    <a class="method-card reveal d4" href="washer.html" aria-label="Open Washer Method explorer">
+    <a class="method-card" href="washer.html" aria-label="Open Washer Method explorer">
       <div class="frame">
-        <img src="washer-preview.png" alt="3D rendering of stacked annular washers along the x-axis, with the active washer partially swept" loading="eager" width="1280" height="800">
-        <div class="frame-tags">
-          <span class="index">02 / WASHER</span>
-          <span class="axis">AROUND&nbsp;X-AXIS</span>
-        </div>
+        <img src="washer-preview.png" alt="3D rendering of stacked annular washers" width="1280" height="800">
       </div>
       <div class="meta">
-        <h3>Washer <b>method.</b></h3>
-        <code class="formula">V = π ∫ (f(x)² − g(x)²) · dx</code>
-        <p>
-          Slices the solid into <em>thin disks or rings</em> perpendicular
-          to the x-axis. Outer radius f(x), inner radius g(x). Stack the
-          slices like coins, sum the volumes.
-        </p>
-        <div class="specs">
-          <div><dt>WASHERS</dt><dd>4 → 60</dd></div>
-          <div><dt>SWEEP</dt><dd>0° → 360°</dd></div>
-          <div><dt>PRESETS</dt><dd>4 + custom</dd></div>
-        </div>
+        <h2>Washer <b>method.</b></h2>
+        <div class="formula">V = π ∫ (f(x)² − g(x)²) · dx</div>
         <div class="open">
-          <span>Open explorer</span>
+          <span>Open</span>
           <span class="arrow"></span>
         </div>
       </div>
     </a>
   </div>
-</section>
-
-<footer>
-  <span>© 2026 · MULTI · FINAL · PROJECT</span>
-  <span>BUILT WITH <a href="https://threejs.org">THREE.JS</a> · <a href="https://github.com/jweivy/multi-final-project">SOURCE</a></span>
-</footer>
+</main>
 
 </body>
 </html>
