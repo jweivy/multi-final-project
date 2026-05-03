@@ -93,6 +93,20 @@
     vertical-align: middle; margin-right: 6px;
   }
 
+  #maclaurinFlash {
+    position: absolute; top: 22px; left: 50%; transform: translateX(-50%) translateY(-12px);
+    background: var(--gold); color: var(--bg);
+    padding: 10px 18px; border-radius: 18px;
+    font-size: 15px; font-weight: bold;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    box-shadow: 0 4px 18px rgba(255, 209, 102, 0.35);
+  }
+  #maclaurinFlash.on {
+    opacity: 1; transform: translateX(-50%) translateY(0);
+  }
+  #maclaurinFlash b { font-weight: 900; font-style: italic; }
+
   footer { padding: 14px 24px 18px; border-top: 1px solid var(--pill-border);
            background: rgba(14, 17, 22, 0.95); }
   .controls { display: grid;
@@ -223,6 +237,7 @@
         <div><span class="swatch" style="background:transparent;border:1px dashed #888"></span>center x = a</div>
       </div>
     </div>
+    <div id="maclaurinFlash">← This is the <b>Maclaurin</b> series</div>
   </div>
 
   <footer>
@@ -251,6 +266,7 @@
           <option value="0.15">⚡ blitz</option>
         </select>
         <button class="action ghost" id="resetBtn">↺ reset view</button>
+        <button class="action ghost" id="snapBtn" style="display:none">snap to a = 0</button>
       </div>
     </div>
     <div class="hint" id="tabHint">drag the order slider — watch each polynomial creep outward from the center until it hugs the curve</div>
@@ -452,6 +468,30 @@ function maxDerivativeBound(presetKey, n, lo, hi) {
   return m;
 }
 
+// === Convergence radius (Tab C) ===
+// R is the radius of convergence of the Taylor series at the preset's natural
+// center (typically a = 0). For named presets where R is clean, hardcoded.
+// For custom expressions we don't try to estimate — show "?".
+//
+// NOTE on Tab C semantics: we draw the band as [center - R, center + R] using
+// the live `center` slider. Strictly speaking, R for the named presets here is
+// the radius around a = 0 (the Maclaurin radius). For sin/cos/exp it's ∞ so
+// the choice doesn't matter. For ln1p/oneOver1Minus/oneOver1Plus the natural
+// teach is at a = 0 anyway — Tab C locks center to 0 (slider hidden).
+const R_TABLE = {
+  sin: Infinity,
+  cos: Infinity,
+  exp: Infinity,
+  ln1p: 1,
+  oneOver1Minus: 1,
+  oneOver1Plus: 1,
+};
+
+function radiusOfConvergence(presetKey) {
+  if (presetKey in R_TABLE) return R_TABLE[presetKey];
+  return null;  // unknown
+}
+
 function actualMaxError(presetKey, coeffs, a, lo, hi) {
   const f = PRESETS[presetKey].f;
   let m = 0;
@@ -574,12 +614,20 @@ function rebuild() {
   disposeGroup(stage);
   if (currentTab === 'A') buildTabA();
   else if (currentTab === 'B') buildTabB();
-  else placeholderTab(currentTab);
+  else if (currentTab === 'C') buildTabC();
+  else if (currentTab === 'D') buildTabD();
   syncOverlay();
 }
 
-function placeholderTab(letter) {
-  // Tabs C and D are spec'd but not built yet — leave the stage empty.
+// Solid-color flat rectangle in the xy plane, x ∈ [xLo, xHi], y ∈ [yLo, yHi].
+// Used for the Tab C convergence/divergence zones.
+function buildZone(xLo, xHi, yLo, yHi, color, opacity) {
+  const geom = new THREE.PlaneGeometry(xHi - xLo, yHi - yLo);
+  geom.translate((xLo + xHi) / 2, (yLo + yHi) / 2, -0.01);
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false,
+  });
+  return new THREE.Mesh(geom, mat);
 }
 
 // === Plotting helpers ===
@@ -720,6 +768,178 @@ function buildTabA() {
   fitCameraY(yMin, yMax, p.defaultA, p.defaultB);
 }
 
+function buildTabC() {
+  const p = PRESETS[currentPreset];
+  const xs = sampleX(p);
+
+  const trueYs = xs.map(p.f);
+  const finiteYs = trueYs.filter(isFinite);
+  const yMin = Math.min(...finiteYs);
+  const yMax = Math.max(...finiteYs);
+  const trueClipped = clipY(trueYs, yMin, yMax);
+
+  // Convergence/divergence zones — drawn first so everything else sits on top.
+  // Center is locked to 0 in this tab (slider hidden) so the band is symmetric.
+  const R = radiusOfConvergence(currentPreset);
+  const xLo = p.defaultA, xHi = p.defaultB;
+  const span = yMax - yMin;
+  const yLo = yMin - 0.15 * span - 0.5;
+  const yHi = yMax + 0.15 * span + 0.5;
+  if (R != null && isFinite(R)) {
+    const blueColor = new THREE.Color(POSITIVE_GRADIENT[0]);
+    const redColor = new THREE.Color(NEGATIVE_GRADIENT[1]);
+    const bandLo = Math.max(xLo, center - R);
+    const bandHi = Math.min(xHi, center + R);
+    if (bandHi > bandLo) {
+      stage.add(buildZone(bandLo, bandHi, yLo, yHi, blueColor, 0.10));
+    }
+    if (bandLo > xLo) {
+      stage.add(buildZone(xLo, bandLo, yLo, yHi, redColor, 0.10));
+    }
+    if (bandHi < xHi) {
+      stage.add(buildZone(bandHi, xHi, yLo, yHi, redColor, 0.10));
+    }
+  }
+  // R = ∞ → entire band is blue (the safe zone is everything visible).
+  // R = null (custom) → don't tint anything.
+  if (R != null && !isFinite(R)) {
+    const blueColor = new THREE.Color(POSITIVE_GRADIENT[0]);
+    stage.add(buildZone(xLo, xHi, yLo, yHi, blueColor, 0.06));
+  }
+
+  // Halo + crisp gold true curve.
+  const haloPoints = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (!isFinite(trueClipped[i])) continue;
+    haloPoints.push(new THREE.Vector3(xs[i], trueClipped[i], -0.005));
+  }
+  stage.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(haloPoints),
+    new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.25 })
+  ));
+  stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
+
+  // Polynomial stack — same as Tab A.
+  for (let k = 0; k <= order; k++) {
+    const coeffs = coefficientsAt(currentPreset, center, k);
+    const polyYs = xs.map(x => taylorPoly(coeffs, center, x));
+    const polyClipped = clipY(polyYs, yMin, yMax);
+    const t = order === 0 ? 1.0 : k / order;
+    const color = gradientColor(POSITIVE_GRADIENT, t);
+    if (k === order && order > 0) {
+      const lavenderHaloPoints = [];
+      for (let i = 0; i < xs.length; i++) {
+        if (!isFinite(polyClipped[i])) continue;
+        lavenderHaloPoints.push(new THREE.Vector3(xs[i], polyClipped[i], -0.004));
+      }
+      stage.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(lavenderHaloPoints),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.25 })
+      ));
+    }
+    const opacity = 0.5 + 0.5 * t;
+    stage.add(buildPolyline(xs, polyClipped, color, opacity));
+  }
+
+  // Dashed boundary lines at x = center ± R (only when R is finite).
+  if (R != null && isFinite(R)) {
+    for (const xPos of [center - R, center + R]) {
+      if (xPos < xLo || xPos > xHi) continue;
+      const geom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(xPos, yLo, 0.005),
+        new THREE.Vector3(xPos, yHi, 0.005),
+      ]);
+      const mat = new THREE.LineDashedMaterial({
+        color: NEGATIVE_GRADIENT[2], dashSize: 0.18, gapSize: 0.10,
+        transparent: true, opacity: 0.85,
+      });
+      const line = new THREE.Line(geom, mat);
+      line.computeLineDistances();
+      stage.add(line);
+    }
+  }
+
+  // Center anchor dot (small — Tab C isn't about the anchor).
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.06, 24),
+    new THREE.MeshBasicMaterial({ color: GOLD })
+  );
+  dot.position.set(center, p.f(center), 0.01);
+  stage.add(dot);
+
+  fitCameraY(yMin, yMax, p.defaultA, p.defaultB);
+}
+
+function buildTabD() {
+  const p = PRESETS[currentPreset];
+  const xs = sampleX(p);
+
+  const trueYs = xs.map(p.f);
+  const finiteYs = trueYs.filter(isFinite);
+  const yMin = Math.min(...finiteYs);
+  const yMax = Math.max(...finiteYs);
+  const trueClipped = clipY(trueYs, yMin, yMax);
+
+  // Halo + crisp gold true curve.
+  const haloPoints = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (!isFinite(trueClipped[i])) continue;
+    haloPoints.push(new THREE.Vector3(xs[i], trueClipped[i], -0.005));
+  }
+  stage.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(haloPoints),
+    new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.25 })
+  ));
+  stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
+
+  // Single lavender polynomial Pₙ around the live center.
+  const coeffs = coefficientsAt(currentPreset, center, order);
+  const polyYs = xs.map(x => taylorPoly(coeffs, center, x));
+  const polyClipped = clipY(polyYs, yMin, yMax);
+  const lavender = gradientColor(POSITIVE_GRADIENT, 1.0);
+  // Halo behind the polynomial too — Tab D is all about watching it move.
+  const polyHaloPoints = [];
+  for (let i = 0; i < xs.length; i++) {
+    if (!isFinite(polyClipped[i])) continue;
+    polyHaloPoints.push(new THREE.Vector3(xs[i], polyClipped[i], -0.004));
+  }
+  stage.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(polyHaloPoints),
+    new THREE.LineBasicMaterial({ color: lavender, transparent: true, opacity: 0.30 })
+  ));
+  stage.add(buildPolyline(xs, polyClipped, lavender, 1.0));
+
+  // Dashed center line at x = a — taller stroke than other tabs because this
+  // tab is built around watching it slide.
+  const centerLineGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(center, yMin - 0.5, 0),
+    new THREE.Vector3(center, yMax + 0.5, 0),
+  ]);
+  const centerLine = new THREE.Line(centerLineGeom, new THREE.LineDashedMaterial({
+    color: GOLD, dashSize: 0.20, gapSize: 0.12, opacity: 0.45, transparent: true,
+  }));
+  centerLine.computeLineDistances();
+  stage.add(centerLine);
+
+  // Big anchor dot at (center, f(center)).
+  const dotR = 0.13;
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(dotR, 32),
+    new THREE.MeshBasicMaterial({ color: GOLD })
+  );
+  dot.position.set(center, p.f(center), 0.02);
+  stage.add(dot);
+  // Inner ring on the dot for emphasis.
+  const ringGeom = new THREE.RingGeometry(dotR * 0.55, dotR * 0.75, 32);
+  const ring = new THREE.Mesh(ringGeom, new THREE.MeshBasicMaterial({
+    color: 0x0e1116, transparent: true, opacity: 0.85,
+  }));
+  ring.position.set(center, p.f(center), 0.025);
+  stage.add(ring);
+
+  fitCameraY(yMin, yMax, p.defaultA, p.defaultB);
+}
+
 function buildTabB() {
   const p = PRESETS[currentPreset];
   const xs = sampleX(p);
@@ -829,16 +1049,24 @@ function syncOverlay() {
       <div><span class="swatch" style="background:#c02a2a;opacity:0.5"></span>actual error f(x) − Pₙ(x)</div>
       <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>Lagrange bound envelope</div>
     `;
-  } else {
-    legend.innerHTML = `<div>(coming soon)</div>`;
+  } else if (currentTab === 'C') {
+    legend.innerHTML = `
+      <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
+      <div><span class="swatch" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>polynomials P₀ … Pₙ</div>
+      <div><span class="swatch" style="background:#10204a;opacity:0.4"></span>convergence zone (|x − a| &lt; R)</div>
+      <div><span class="swatch" style="background:#c02a2a;opacity:0.4"></span>divergence zone (series can't reach)</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>radius boundary x = a ± R</div>
+    `;
+  } else if (currentTab === 'D') {
+    legend.innerHTML = `
+      <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
+      <div><span class="swatch" style="background:#d5cdff"></span>polynomial Pₙ around a</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #ffd166"></span>center x = a (drag the slider)</div>
+    `;
   }
 
-  if (currentTab === 'C' || currentTab === 'D') {
-    document.getElementById('ovFormula').textContent = `Tab ${currentTab}: coming soon — see design spec`;
-    document.getElementById('ovTabReadout').textContent = '';
-    return;
-  }
   document.getElementById('ovFormula').textContent = p.formula;
+
   if (currentTab === 'A') {
     const coeffs = coefficientsAt(currentPreset, center, order);
     document.getElementById('ovTabReadout').textContent = formatPolynomialReadout(coeffs, center);
@@ -857,6 +1085,29 @@ function syncOverlay() {
       `M = max|f<sup>(${order + 1})</sup>| ≈ <b>${fmtM}</b><br>` +
       `Lagrange bound at edge: <b>${fmtBound}</b><br>` +
       `Actual max error: <b>${fmtActual}</b>`;
+  } else if (currentTab === 'C') {
+    const R = radiusOfConvergence(currentPreset);
+    const fmtR = R == null ? '? (custom)' : (isFinite(R) ? R.toFixed(2) : '∞');
+    let footnote = '';
+    if (currentPreset === 'oneOver1Plus') {
+      footnote = `<br><span style="font-style:italic;color:var(--soft)">Singularities at x = ±i (complex plane). The real axis looks fine, but the series can't cross them.</span>`;
+    } else if (currentPreset === 'oneOver1Minus') {
+      footnote = `<br><span style="font-style:italic;color:var(--soft)">Pole at x = 1. Series diverges past the boundary on the right.</span>`;
+    } else if (currentPreset === 'ln1p') {
+      footnote = `<br><span style="font-style:italic;color:var(--soft)">Branch point at x = −1. Series diverges left of the boundary.</span>`;
+    } else if (R != null && !isFinite(R)) {
+      footnote = `<br><span style="font-style:italic;color:var(--soft)">Entire function — series converges everywhere.</span>`;
+    }
+    document.getElementById('ovTabReadout').innerHTML =
+      `n = <b>${order}</b> · center a = <b>0.00</b><br>` +
+      `Radius of convergence R = <b>${fmtR}</b>${footnote}`;
+  } else if (currentTab === 'D') {
+    const coeffs = coefficientsAt(currentPreset, center, order);
+    const isMaclaurin = Math.abs(center) < 0.005;
+    const tag = isMaclaurin ? `   <span style="color:var(--gold)">← Maclaurin series</span>` : '';
+    document.getElementById('ovTabReadout').innerHTML =
+      `n = <b>${order}</b> · a = <b>${center.toFixed(2)}</b>${tag}<br>` +
+      `<span style="font-size:12px">${formatPolynomialReadout(coeffs, center)}</span>`;
   }
 }
 
@@ -876,7 +1127,25 @@ document.querySelectorAll('#tabBar button').forEach(btn => {
     btn.classList.add('active');
     currentTab = btn.dataset.tab;
     document.getElementById('intervalBlock').style.display = currentTab === 'B' ? '' : 'none';
+    // Tab C locks center to 0 (radius is around the natural center). Other tabs show it.
     document.getElementById('centerBlock').style.display = currentTab === 'C' ? 'none' : '';
+    // Tab D gets the snap-to-zero button instead of the reset-view button.
+    document.getElementById('snapBtn').style.display = currentTab === 'D' ? '' : 'none';
+    document.getElementById('resetBtn').style.display = currentTab === 'D' ? 'none' : '';
+    // Tab C locks center to 0.
+    if (currentTab === 'C') {
+      center = 0;
+      document.getElementById('centerSlider').value = '0';
+      document.getElementById('lblCenter').textContent = '0.00';
+    }
+    // Update hint per tab.
+    const hints = {
+      A: 'drag the order slider — watch each polynomial creep outward from the center until it hugs the curve',
+      B: 'drag the order slider to tighten the bound · drag the interval handles to shrink M',
+      C: 'try y = 1/(1+x²) — looks innocent on the real axis but R = 1 anyway. Drag order up and watch the polynomials explode outside the blue zone.',
+      D: 'drag the center slider to slide the polynomial along the curve · click "snap to a = 0" for the Maclaurin moment',
+    };
+    document.getElementById('tabHint').textContent = hints[currentTab];
     rebuild();
   });
 });
@@ -925,20 +1194,64 @@ function stopPlay() {
 
 document.getElementById('playBtn').addEventListener('click', () => {
   if (playTimer) { stopPlay(); return; }
-  if (currentTab !== 'A') return;
-  document.getElementById('playBtn').textContent = '⏸  pause';
   const speed = parseFloat(document.getElementById('speedSel').value);
-  const interval = Math.max(60, 220 * speed);
-  let n = 0;
-  const maxN = parseInt(document.getElementById('orderSlider').max, 10);
-  playTimer = setInterval(() => {
-    order = n;
-    document.getElementById('orderSlider').value = String(n);
-    document.getElementById('lblOrder').textContent = String(n);
-    rebuild();
-    n++;
-    if (n > maxN) stopPlay();
-  }, interval);
+  document.getElementById('playBtn').textContent = '⏸  pause';
+  // Tabs A and C: sweep order from 0 upward.
+  // Tab D: sweep center across the function's natural window.
+  // Tab B: no play (would conflict with the bound-pinch teach).
+  if (currentTab === 'A' || currentTab === 'C') {
+    const interval = Math.max(60, 220 * speed);
+    let n = 0;
+    const maxN = parseInt(document.getElementById('orderSlider').max, 10);
+    playTimer = setInterval(() => {
+      order = n;
+      document.getElementById('orderSlider').value = String(n);
+      document.getElementById('lblOrder').textContent = String(n);
+      rebuild();
+      n++;
+      if (n > maxN) stopPlay();
+    }, interval);
+  } else if (currentTab === 'D') {
+    const p = PRESETS[currentPreset];
+    const interval = Math.max(40, 100 * speed);
+    const steps = 80;
+    let i = 0;
+    playTimer = setInterval(() => {
+      const t = i / steps;
+      center = p.defaultA + (p.defaultB - p.defaultA) * t;
+      document.getElementById('centerSlider').value = String(center);
+      document.getElementById('lblCenter').textContent = center.toFixed(2);
+      rebuild();
+      i++;
+      if (i > steps) stopPlay();
+    }, interval);
+  } else {
+    // Tab B has no play action.
+    stopPlay();
+  }
+});
+
+// Snap-to-zero for Tab D — instant jump (background tabs throttle setInterval
+// too aggressively to ease cleanly), then a 1.6s flash of the Maclaurin
+// callout via Web Animations API (immune to throttling).
+document.getElementById('snapBtn').addEventListener('click', () => {
+  stopPlay();
+  center = 0;
+  document.getElementById('centerSlider').value = '0';
+  document.getElementById('lblCenter').textContent = '0.00';
+  rebuild();
+  const flash = document.getElementById('maclaurinFlash');
+  if (flash && flash.animate) {
+    flash.animate(
+      [
+        { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
+        { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.15 },
+        { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.85 },
+        { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
+      ],
+      { duration: 1800, easing: 'ease-out', fill: 'forwards' }
+    );
+  }
 });
 
 document.getElementById('resetBtn').addEventListener('click', () => {
