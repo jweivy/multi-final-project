@@ -1,7 +1,7 @@
 # Taylor Series Explorer — Design
 
 **Date:** 2026-05-02
-**Status:** Approved. Tabs A and B to be implemented; tabs C and D spec'd but deferred.
+**Status:** Shipped. All four tabs implemented and verified.
 **Sibling pages:** `shell.html`, `washer.html`. Landing page: `index.html`.
 
 ## Goal
@@ -149,7 +149,7 @@ A central module `derivatives(f, x, k)` returning the k-th derivative of `f` at 
 - For custom expressions: numeric only — sample `f^(n+1)` at 200 points across `[x_lo, x_hi]` via the finite-difference core.
 - Recompute `M` on interval drag end (not during drag — too expensive at high `n`).
 
-### Tab C — Radius of convergence is real (DEFERRED)
+### Tab C — Radius of convergence is real
 
 **Visual:**
 - Gold curve + polynomial stack from Tab A.
@@ -178,7 +178,7 @@ A central module `derivatives(f, x, k)` returning the k-th derivative of `f` at 
 - `Center a = 0`
 - Function-specific footnote. For `1/(1+x²)`: "Singularities at x = ±i (complex plane). Real axis looks fine, but the series can't cross them."
 
-### Tab D — Maclaurin is Taylor at a=0 (DEFERRED)
+### Tab D — Maclaurin is Taylor at a=0
 
 **Visual:**
 - Gold curve = true `f(x)`.
