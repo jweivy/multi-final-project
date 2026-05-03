@@ -4,25 +4,34 @@ Context for Claude Code when working in this repo.
 
 ## What this is
 
-An interactive 3D explorer of the **shell method** for volumes of revolution. Built for a high-school multivariable / calc-2 final project. Julian + 3 teammates collaborate on it via GitHub.
+An interactive explorer for high-school multivariable / calc-2 topics: **shell method**, **washer method**, and **Taylor series** so far. Built as a final project; Julian + 3 teammates collaborate via GitHub.
 
 - **Repo:** https://github.com/jweivy/multi-final-project (public)
-- **Stack:** single `index.html`, vanilla JS, Three.js r160 from a CDN (`importmap`)
+- **Stack:** one HTML file per topic, vanilla JS, Three.js r160 from a CDN (`importmap`)
 - **Lives at:** `C:\Users\jweiy\Documents\Claude-Projects\calc-volumes-3d`
 
 ## Project structure
 
 ```
 calc-volumes-3d/
-├── index.html        # the entire app (UI + Three.js scene + math)
-├── README.md         # public-facing project description
-├── CLAUDE.md         # this file
-├── .gitignore        # ignores .claude/ and OS junk
+├── index.html        # landing page (links to the three method explorers)
+├── shell.html        # shell method 3D explorer (the original)
+├── washer.html       # washer method 3D explorer
+├── series.html       # Taylor series 2D explorer (4 tabs; A & B built, C & D spec'd)
+├── shell-preview.png
+├── washer-preview.png
+├── series-preview.png
+├── README.md
+├── CLAUDE.md
+├── docs/superpowers/
+│   ├── specs/        # design docs (one per major feature)
+│   └── plans/        # implementation plans tied to specs
+├── .gitignore
 └── .claude/
     └── launch.json   # local preview config (gitignored)
 ```
 
-Everything is in `index.html` on purpose — no build step, no `npm`, runs from a `file://` open or any static server.
+Each explorer is a single HTML file on purpose — no build step, no `npm`, runs from a `file://` open or any static server. Don't suggest splitting them up unless one grows past ~1500 lines.
 
 ## Architecture (mental model)
 
@@ -39,6 +48,28 @@ Everything is in `index.html` on purpose — no build step, no `npm`, runs from 
    - gold edge rings + seam lines, ONLY for the active shell (drawing them on every shell creates moiré at high density)
 5. **Lighting** — `HemisphereLight` for sky/ground fill + a `DirectionalLight` parented to the camera. The `scene.add(camera)` call is necessary so the camera-light's transform inherits.
 6. **Custom equation** — `compileExpression(str)` builds `new Function('x', 'with (Math) { return (...); }')`. Lowercases input and rewrites `^` → `**` and `π` → `pi`. Probes a few sample points to reject NaN/Infinity. The compiled function is stored on `PRESETS.custom.f`. Default value of `customExpr` is `sin(x)` over `[0, 2π]` — chosen so the +/- shell behavior is visible the moment a kid clicks the custom tab.
+
+## Series page architecture (series.html)
+
+A 2D Taylor/Maclaurin explorer with four tabs sharing one chassis. Spec lives at `docs/superpowers/specs/2026-05-02-taylor-series-explorer-design.md`; implementation plan at `docs/superpowers/plans/2026-05-02-taylor-series-explorer.md`.
+
+1. **Same Three.js + importmap pattern** as shell/washer, but with `OrthographicCamera` looking down the +z axis so the xy plane reads as 2D. Same disposal/rebuild pattern (single `stage` group). Same color tokens. `OrbitControls` with `enableRotate = false` — pan and zoom only.
+2. **Function library is different:** `sin`, `cos`, `exp`, `ln(1+x)`, `1/(1−x)`, `1/(1+x²)`, plus custom. Polynomial families like `√x` or `x²/2` are pedagogically boring here (their Taylor series is themselves).
+3. **Derivative core (`derivAt`)** uses closed-form derivative formulas for the named presets (clean, no numeric noise). Custom expressions and `1/(1+x²)` fall back to recursive 5-point finite differences. Cap order at 20 — finite diff degrades past that.
+4. **Coefficient cache (`coefficientsAt`)** memoizes `f^(k)(a)/k!` arrays keyed by `(presetKey, a, n)`. Polynomial evaluation across 400 plot points reuses the same coefficients. Cleared on custom-apply. LRU-bounded at 500 entries.
+5. **Tab bar dispatches to four scene builders** (`buildTabA`, `buildTabB`, etc.) that each add geometry to the shared `stage` group. `rebuild()` disposes the stage and calls the right builder. Same pattern as the shell explorer's `rebuild`.
+6. **Y-axis clipping in `clipY`** is critical — high-order polynomials shoot to ±∞ outside the convergence radius and would crush the rest of the scene. Clip everything to slightly outside the visible y-range so the polynomial visibly slams into the viewport edge.
+7. **Halo trick for stroke weight:** Three.js `Line` ignores `linewidth` on most platforms, so the gold curve and active polynomial each get a translucent halo line drawn at a slight z-offset behind the crisp inner line. Cheap and effective.
+
+**Tab status:**
+- **A (polynomial stack):** built. Order slider, play, formula readout.
+- **B (error bounds):** built. Single `Pₙ` + actual error band + dashed Lagrange envelope + draggable interval handles + `M`/bound/actual readout.
+- **C (convergence radius):** spec'd, not built. Tab body is empty; overlay shows "coming soon".
+- **D (center point):** spec'd, not built.
+
+**Inline self-tests:** the derivative core and the polynomial evaluator each have an IIFE test block that runs at page load and logs PASS/FAIL to console. No test framework — these are `console.assert`-style. If you modify either module, reload and check the console for `[derivatives] all 21 tests passed` and `[taylor] all 11 tests passed`.
+
+**Inspection hooks:** `window.__stage`, `window.__camera`, `window.__rebuild`, `window.__state()` are exposed for `preview_eval` debugging — harmless in production.
 
 ## Conventions
 
@@ -119,19 +150,22 @@ When extending the app, in order of "least likely to break things":
 
 (Picking this back up — read this section before doing anything substantive.)
 
-**Status as of last edit:** All four shell-method features are working — three preset functions, a custom-equation tab with a parser, density / completed / sweep sliders, play with speed selector, and red-shell rendering for negative function values. Most recent push: commit `b0a3df3`, "Unify all positive shells under one blue-purple gradient." Repo is at `https://github.com/jweivy/multi-final-project`, public, on branch `main`.
+**Status as of last edit:** Three explorer pages live (shell, washer, series). The series page has tabs A and B fully built; tabs C and D are spec'd in `docs/superpowers/specs/2026-05-02-taylor-series-explorer-design.md` but not implemented — their tab bodies render nothing and the overlay shows "coming soon". Landing page (`index.html`) now has three method cards under the broadened title "Calculus, visualized."
 
-**Pending — Julian needs to give me three GitHub usernames** so I can fire the collaborator invites with `gh api -X PUT /repos/jweivy/multi-final-project/collaborators/USERNAME -f permission=push`. He hasn't shared them yet. Don't add anyone without confirmation. As soon as he sends the names, the command above does it. Pick the right account scope — the active gh auth is `jweivy` (verified via `gh auth status`).
+**Pending — Julian still needs to give me three GitHub usernames** so I can fire the collaborator invites with `gh api -X PUT /repos/jweivy/multi-final-project/collaborators/USERNAME -f permission=push`. He hasn't shared them yet. Don't add anyone without confirmation. As soon as he sends the names, the command above does it. The active gh auth is `jweivy` (verified via `gh auth status`).
 
 **Likely next requests** (in rough order of probability):
-1. **Washer method companion view.** Disks perpendicular to the axis instead of shells. Either a toggle on the existing page or a separate section. Same `f, a, b` inputs, different geometry. The volume formula switches to `∫ π · f(x)² dx` and the integration direction may swap (around x-axis instead of z-axis).
-2. **Annotate shells with their individual contribution** (e.g., a small floating label "+0.23" or "-0.18" near each shell). Would teach kids what each strip is worth in the integral.
-3. **Toggle for absolute volume vs signed volume.** Right now we always show signed. A small switch in the overlay would let them flip and see `∫ 2π·x·|f(x)| dx`.
-4. **2D companion plot** — a small inset showing the curve in the xz plane with a vertical strip highlighted at the same `r` as the active shell. Helps connect the 2D math to the 3D solid.
-5. **x-axis revolution** instead of z-axis — a "rotate around" toggle. This is more invasive (changes the whole coordinate setup), so probably last.
+1. **Build Tabs C and D of the series page.** Spec is complete; pick up from the build-order section of the spec doc. Tab C is the radius-of-convergence viz (drama: `1/(1+x²)` with the band visible). Tab D makes the center `a` slider the star, drag it along the curve.
+2. **Annotate shells/washers with their individual contribution** to the integral (e.g., floating "+0.23" labels per shell).
+3. **Toggle for absolute volume vs signed volume** on the shell/washer pages.
+4. **2D companion plot** on the shell page showing the curve in the xz plane with the active shell's strip highlighted.
+5. **x-axis revolution toggle** for shells (more invasive — changes the coordinate setup).
 
-**If a kid asks about TeX-style math input** (`\sin`, `\frac{...}`): the parser as built can't handle that. Would need to either guide them to JS-style syntax or import a math expression parser like math.js (acceptable since it's a single CDN line).
+**If a kid asks about TeX-style math input** (`\sin`, `\frac{...}`): none of the parsers can handle that. Would need to either guide them to JS-style syntax or import a math expression parser like math.js (acceptable since it's a single CDN line).
 
-**Don't suggest splitting `index.html` into multiple files.** I considered it; the single-file simplicity is the point. If the file grows past ~1500 lines, that conversation can happen — until then, keep it monolithic.
+**Don't suggest splitting any of the .html files.** Each page is monolithic on purpose. If one grows past ~1500 lines, that conversation can happen — until then, keep them monolithic.
 
-**Watch for:** any change that touches `rebuild()` should be tested with the `custom` preset set to `sin(x)` on `[0, 2π]` because that's the configuration that exercises both positive and negative shells, the at-max edge case, and the camera framing for negative z. If that scenario looks right, most others will too.
+**Watch for:**
+- Any change to `rebuild()` in `shell.html` should be tested with the `custom` preset set to `sin(x)` on `[0, 2π]` — exercises positive + negative shells, the at-max edge case, and camera framing for negative z.
+- Any change to `derivAt` or `coefficientsAt` in `series.html` should be tested by reloading and checking the console for the two PASS lines from the inline self-tests.
+- Any change to the series-page polynomial stack rendering should be tested with `1/(1+x²)` because that's the function that exercises the y-clipping at the convergence-radius edge.
