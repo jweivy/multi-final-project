@@ -72,6 +72,25 @@
   #scene { position: absolute; inset: 0; display: block;
            width: 100% !important; height: 100% !important; }
 
+  /* Per-tab caption — sits above the scene, plain language, big enough to read. */
+  #sceneCaption {
+    position: absolute;
+    top: 14px; left: 50%; transform: translateX(-50%);
+    max-width: min(680px, calc(100% - 220px));
+    pointer-events: none;
+    background: rgba(14, 17, 22, 0.78);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--pill-border);
+    border-radius: 14px;
+    padding: 10px 18px;
+    font-size: 14px; line-height: 1.45;
+    color: var(--ink);
+    text-align: center;
+    z-index: 5;
+  }
+  #sceneCaption b { color: var(--gold); font-weight: 600; }
+  #sceneCaption em { color: var(--gold); font-style: normal; opacity: 0.9; }
+
   .overlay {
     position: absolute; top: 18px; left: 22px;
     pointer-events: none;
@@ -227,6 +246,7 @@
 
   <div id="scene-wrap">
     <canvas id="scene"></canvas>
+    <div id="sceneCaption">Drag the <b>Order n</b> slider — watch each new polynomial bend a little more, until it hugs the gold curve.</div>
     <div class="overlay">
       <h2><b id="ovTitle">y = sin(x)</b></h2>
       <div class="formula" id="ovFormula">Maclaurin series around a = 0</div>
@@ -243,18 +263,18 @@
   <footer>
     <div class="controls">
       <div class="slider-block">
-        <div class="label-row"><span>Order n</span><b id="lblOrder">5</b></div>
-        <input id="orderSlider" type="range" min="0" max="20" value="5">
+        <div class="label-row"><span title="How many terms in the polynomial. Higher = closer fit, but slower to compute and more wiggly outside the convergence zone.">Order n</span><b id="lblOrder">5</b></div>
+        <input id="orderSlider" type="range" min="0" max="20" value="5" title="0 = just the value at x=a · 1 = adds a tangent line · 2 = adds a parabola · …">
       </div>
       <div class="slider-block" id="centerBlock">
-        <div class="label-row"><span>Center a</span><b id="lblCenter">0.00</b></div>
-        <input id="centerSlider" type="range" min="-6.28" max="6.28" step="0.01" value="0">
+        <div class="label-row"><span title="Where the polynomial is anchored. The fit is perfect at this x-value and gets worse as you move away.">Center a</span><b id="lblCenter">0.00</b></div>
+        <input id="centerSlider" type="range" min="-6.28" max="6.28" step="0.01" value="0" title="Drag to move the polynomial's anchor point along the x-axis">
       </div>
       <div class="slider-block" id="intervalBlock" style="display:none">
-        <div class="label-row"><span>Interval</span><b id="lblInterval">[−1.5, 1.5]</b></div>
+        <div class="label-row"><span title="The window over which we measure the worst-case error. Shrinking the window shrinks the worst-case promise.">Bound window</span><b id="lblInterval">[−1.5, 1.5]</b></div>
         <div style="display:flex; gap:6px;">
-          <input id="intervalLoSlider" type="range" min="-6.28" max="0" step="0.01" value="-1.5" style="flex:1">
-          <input id="intervalHiSlider" type="range" min="0" max="6.28" step="0.01" value="1.5" style="flex:1">
+          <input id="intervalLoSlider" type="range" min="-6.28" max="0" step="0.01" value="-1.5" style="flex:1" title="Left edge of the bound window">
+          <input id="intervalHiSlider" type="range" min="0" max="6.28" step="0.01" value="1.5" style="flex:1" title="Right edge of the bound window">
         </div>
       </div>
       <div class="button-stack">
@@ -543,6 +563,16 @@ let order = 5;
 let intervalLo = -1.5;
 let intervalHi = 1.5;
 
+// Camera re-fit gate: cheap to skip a fit on slider drags, expensive to do
+// one on every rebuild (causes jitter during play). Set true on tab/preset/
+// custom-apply, consumed by fitCameraY callers.
+let needsCameraFit = true;
+
+// Tracks what the play timer is sweeping ('order' or 'center'). Lets the
+// slider listeners decide whether to interrupt play (only if the user is
+// fighting the same axis the timer is driving).
+let playKind = null;
+
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -608,6 +638,12 @@ function gradientColor(stops, t) {
   const [c0, c1, c2] = stops.map(h => new THREE.Color(h));
   if (t <= 0.5) return new THREE.Color().lerpColors(c0, c1, t / 0.5);
   return new THREE.Color().lerpColors(c1, c2, (t - 0.5) / 0.5);
+}
+
+function setSceneCaption(html) {
+  document.getElementById('sceneCaption').innerHTML = html;
+  // Strip tags for the small footer hint — same content, plainer treatment.
+  document.getElementById('tabHint').innerHTML = html;
 }
 
 function rebuild() {
@@ -692,6 +728,8 @@ function clipY(ys, yMin, yMax) {
 }
 
 function fitCameraY(yMin, yMax, xMin, xMax) {
+  if (!needsCameraFit) return;  // skip on slider-driven rebuilds
+  needsCameraFit = false;
   const xPad = (xMax - xMin) * 0.05;
   const yPad = (yMax - yMin) * 0.15 + 0.5;
   const wrap = document.getElementById('scene-wrap');
@@ -786,25 +824,26 @@ function buildTabC() {
   const yLo = yMin - 0.15 * span - 0.5;
   const yHi = yMax + 0.15 * span + 0.5;
   if (R != null && isFinite(R)) {
-    const blueColor = new THREE.Color(POSITIVE_GRADIENT[0]);
-    const redColor = new THREE.Color(NEGATIVE_GRADIENT[1]);
+    // Brighter, more readable hues than the dark POSITIVE_GRADIENT[0] /
+    // NEGATIVE_GRADIENT[1]. 0.20-0.22 opacity reads cleanly on the dark bg.
+    const blueColor = new THREE.Color(0x4a7afd);
+    const redColor = new THREE.Color(0xff5e5e);
     const bandLo = Math.max(xLo, center - R);
     const bandHi = Math.min(xHi, center + R);
     if (bandHi > bandLo) {
-      stage.add(buildZone(bandLo, bandHi, yLo, yHi, blueColor, 0.10));
+      stage.add(buildZone(bandLo, bandHi, yLo, yHi, blueColor, 0.18));
     }
     if (bandLo > xLo) {
-      stage.add(buildZone(xLo, bandLo, yLo, yHi, redColor, 0.10));
+      stage.add(buildZone(xLo, bandLo, yLo, yHi, redColor, 0.22));
     }
     if (bandHi < xHi) {
-      stage.add(buildZone(bandHi, xHi, yLo, yHi, redColor, 0.10));
+      stage.add(buildZone(bandHi, xHi, yLo, yHi, redColor, 0.22));
     }
   }
-  // R = ∞ → entire band is blue (the safe zone is everything visible).
-  // R = null (custom) → don't tint anything.
   if (R != null && !isFinite(R)) {
-    const blueColor = new THREE.Color(POSITIVE_GRADIENT[0]);
-    stage.add(buildZone(xLo, xHi, yLo, yHi, blueColor, 0.06));
+    // R = ∞: tint the whole window blue ("safe everywhere").
+    const blueColor = new THREE.Color(0x4a7afd);
+    stage.add(buildZone(xLo, xHi, yLo, yHi, blueColor, 0.10));
   }
 
   // Halo + crisp gold true curve.
@@ -954,11 +993,15 @@ function buildTabB() {
   const polyYs = xs.map(x => taylorPoly(coeffs, center, x));
   const polyClipped = clipY(polyYs, yMin, yMax);
 
-  // Translucent red error band between f(x) and P_n(x).
-  const errColor = new THREE.Color(NEGATIVE_GRADIENT[1]);
-  stage.add(buildBand(xs, trueClipped, polyClipped, errColor, 0.30));
+  // Pink translucent error band between f(x) and P_n(x). Pink because the
+  // legend now says "actual error" — kept warm but visually distinct from
+  // the gold "worst-case promise" envelope below.
+  const errColor = new THREE.Color(0xff7eb6);
+  stage.add(buildBand(xs, trueClipped, polyClipped, errColor, 0.32));
 
-  // Lagrange envelope: dashed red curves at P_n ± M·|x−a|^(n+1)/(n+1)!
+  // Lagrange envelope: gold dashed curves at P_n ± M·|x−a|^(n+1)/(n+1)!
+  // — matches the gold bound-window verticals so the visual story is:
+  // "gold = the worst-case promise we're checking".
   const M = maxDerivativeBound(currentPreset, order, intervalLo, intervalHi);
   if (isFinite(M)) {
     const fact = FACTORIAL[order + 1];
@@ -966,8 +1009,7 @@ function buildTabB() {
     const envDnYs = xs.map((x, i) => polyYs[i] - M * Math.pow(Math.abs(x - center), order + 1) / fact);
     const envUpClipped = clipY(envUpYs, yMin, yMax);
     const envDnClipped = clipY(envDnYs, yMin, yMax);
-    const envColor = new THREE.Color(NEGATIVE_GRADIENT[2]);
-    const envMatBase = { color: envColor, dashSize: 0.12, gapSize: 0.08, transparent: true, opacity: 0.85 };
+    const envMatBase = { color: GOLD, dashSize: 0.14, gapSize: 0.10, transparent: true, opacity: 0.75 };
     const envUpGeom = new THREE.BufferGeometry().setFromPoints(
       xs.map((x, i) => new THREE.Vector3(x, envUpClipped[i], 0)).filter(p => isFinite(p.y))
     );
@@ -998,15 +1040,26 @@ function buildTabB() {
   const lavender = gradientColor(POSITIVE_GRADIENT, 1.0);
   stage.add(buildPolyline(xs, polyClipped, lavender, 1.0));
 
-  // Interval handles: two solid red verticals.
-  const handleColor = NEGATIVE_GRADIENT[1];
+  // Bound-window verticals: gold, distinct from the red error semantics.
+  // (Earlier these were red and visually collided with the error band /
+  // envelope.) Two-segment style: solid line in the middle, faded ends.
   for (const xPos of [intervalLo, intervalHi]) {
     const geom = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(xPos, yMin - 0.3, 0),
       new THREE.Vector3(xPos, yMax + 0.3, 0),
     ]);
     stage.add(new THREE.Line(geom, new THREE.LineBasicMaterial({
-      color: handleColor, transparent: true, opacity: 0.5,
+      color: GOLD, transparent: true, opacity: 0.55,
+    })));
+    // Small triangle at the top edge to read as a "handle".
+    const triGeom = new THREE.BufferGeometry();
+    const ty = yMax + 0.3, sz = 0.13;
+    triGeom.setAttribute('position', new THREE.Float32BufferAttribute([
+      xPos, ty, 0,  xPos - sz, ty + sz, 0,  xPos + sz, ty + sz, 0,
+    ], 3));
+    triGeom.setIndex([0, 1, 2]);
+    stage.add(new THREE.Mesh(triGeom, new THREE.MeshBasicMaterial({
+      color: GOLD, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
     })));
   }
 
@@ -1045,17 +1098,18 @@ function syncOverlay() {
   } else if (currentTab === 'B') {
     legend.innerHTML = `
       <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
-      <div><span class="swatch" style="background:#d5cdff"></span>polynomial Pₙ</div>
-      <div><span class="swatch" style="background:#c02a2a;opacity:0.5"></span>actual error f(x) − Pₙ(x)</div>
-      <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>Lagrange bound envelope</div>
+      <div><span class="swatch" style="background:#d5cdff"></span>polynomial guess Pₙ</div>
+      <div><span class="swatch" style="background:#ff7eb6;opacity:0.6"></span>actual error (gap between them)</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #ffd166"></span>worst-case bound (gold dashes)</div>
+      <div><span class="swatch" style="background:#ffd166;opacity:0.55;width:3px"></span>bound window (drag the sliders)</div>
     `;
   } else if (currentTab === 'C') {
     legend.innerHTML = `
       <div><span class="swatch" style="background:#ffd166"></span>true f(x)</div>
       <div><span class="swatch" style="background:linear-gradient(90deg,#10204a,#6750d8,#d5cdff)"></span>polynomials P₀ … Pₙ</div>
-      <div><span class="swatch" style="background:#10204a;opacity:0.4"></span>convergence zone (|x − a| &lt; R)</div>
-      <div><span class="swatch" style="background:#c02a2a;opacity:0.4"></span>divergence zone (series can't reach)</div>
-      <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>radius boundary x = a ± R</div>
+      <div><span class="swatch" style="background:#4a7afd;opacity:0.6"></span>safe zone — series follows the curve</div>
+      <div><span class="swatch" style="background:#ff5e5e;opacity:0.6"></span>runaway zone — series can't reach here</div>
+      <div><span class="swatch" style="background:transparent;border:1px dashed #ff7070"></span>boundary at x = a ± R</div>
     `;
   } else if (currentTab === 'D') {
     legend.innerHTML = `
@@ -1077,14 +1131,24 @@ function syncOverlay() {
     const dEdge = Math.max(Math.abs(intervalHi - center), Math.abs(intervalLo - center));
     const bound = isFinite(M) ? M * Math.pow(dEdge, order + 1) / fact : Infinity;
     const actual = actualMaxError(currentPreset, coeffs, center, intervalLo, intervalHi);
-    const fmtM = isFinite(M) ? M.toExponential(2) : '∞';
-    const fmtBound = isFinite(bound) ? bound.toExponential(2) : '∞';
-    const fmtActual = actual.toExponential(2);
+    // Friendly number formatter: small decimals get fixed notation, very small/large get scientific.
+    const fmt = v => {
+      if (!isFinite(v)) return '∞';
+      const abs = Math.abs(v);
+      if (abs === 0) return '0';
+      if (abs >= 0.001 && abs < 10000) return v.toFixed(abs >= 1 ? 2 : 4);
+      return v.toExponential(2);
+    };
+    const ratio = isFinite(bound) && bound > 0 ? actual / bound : NaN;
+    const tightness = isFinite(ratio)
+      ? `<span style="color:var(--soft);font-size:11px">(actual is ${(ratio * 100).toFixed(1)}% of the worst case)</span>`
+      : '';
     document.getElementById('ovTabReadout').innerHTML =
-      `n = <b>${order}</b> · interval [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]<br>` +
-      `M = max|f<sup>(${order + 1})</sup>| ≈ <b>${fmtM}</b><br>` +
-      `Lagrange bound at edge: <b>${fmtBound}</b><br>` +
-      `Actual max error: <b>${fmtActual}</b>`;
+      `<div style="margin-bottom:4px">terms: <b>${order}</b> · window: [${intervalLo.toFixed(2)}, ${intervalHi.toFixed(2)}]</div>` +
+      `<div>worst-case error promised: <b>${fmt(bound)}</b></div>` +
+      `<div>actual worst error: <b>${fmt(actual)}</b></div>` +
+      `<div>${tightness}</div>` +
+      `<div style="color:var(--soft);font-size:10px;margin-top:6px">M = ${fmt(M)} (worst slope of derivative #${order + 1} over the window)</div>`;
   } else if (currentTab === 'C') {
     const R = radiusOfConvergence(currentPreset);
     const fmtR = R == null ? '? (custom)' : (isFinite(R) ? R.toFixed(2) : '∞');
@@ -1113,50 +1177,75 @@ function syncOverlay() {
 
 document.querySelectorAll('.presets button').forEach(btn => {
   btn.addEventListener('click', () => {
+    stopPlay();
     document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentPreset = btn.dataset.preset;
     document.getElementById('customForm').classList.toggle('shown', currentPreset === 'custom');
+    needsCameraFit = true;  // function changed → re-fit camera
     rebuild();
   });
 });
 
 document.querySelectorAll('#tabBar button').forEach(btn => {
   btn.addEventListener('click', () => {
+    stopPlay();  // any tab change cancels in-flight play
     document.querySelectorAll('#tabBar button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTab = btn.dataset.tab;
+
+    // Tab visibility rules — set BEFORE rebuild so a stale frame doesn't flash.
     document.getElementById('intervalBlock').style.display = currentTab === 'B' ? '' : 'none';
-    // Tab C locks center to 0 (radius is around the natural center). Other tabs show it.
+    // Tab C locks center to 0 (radius is around the natural center).
     document.getElementById('centerBlock').style.display = currentTab === 'C' ? 'none' : '';
-    // Tab D gets the snap-to-zero button instead of the reset-view button.
+    // Tab D swaps reset-view for snap-to-zero. Tab B has no play action.
     document.getElementById('snapBtn').style.display = currentTab === 'D' ? '' : 'none';
     document.getElementById('resetBtn').style.display = currentTab === 'D' ? 'none' : '';
+    document.getElementById('playBtn').style.display = currentTab === 'B' ? 'none' : '';
+
     // Tab C locks center to 0.
     if (currentTab === 'C') {
       center = 0;
       document.getElementById('centerSlider').value = '0';
       document.getElementById('lblCenter').textContent = '0.00';
+      // Tab C is dead-on-arrival on sin/cos/exp (R=∞) — auto-switch to the
+      // dramatic example unless the user explicitly picked a finite-R preset.
+      const finiteRPresets = ['ln1p', 'oneOver1Minus', 'oneOver1Plus'];
+      if (!finiteRPresets.includes(currentPreset)) {
+        currentPreset = 'oneOver1Plus';
+        document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+        document.querySelector('.presets button[data-preset="oneOver1Plus"]').classList.add('active');
+        document.getElementById('customForm').classList.remove('shown');
+      }
     }
-    // Update hint per tab.
-    const hints = {
-      A: 'drag the order slider — watch each polynomial creep outward from the center until it hugs the curve',
-      B: 'drag the order slider to tighten the bound · drag the interval handles to shrink M',
-      C: 'try y = 1/(1+x²) — looks innocent on the real axis but R = 1 anyway. Drag order up and watch the polynomials explode outside the blue zone.',
-      D: 'drag the center slider to slide the polynomial along the curve · click "snap to a = 0" for the Maclaurin moment',
-    };
-    document.getElementById('tabHint').textContent = hints[currentTab];
+
+    // Tab change is a major scene reset — force the camera to re-fit.
+    needsCameraFit = true;
+    setSceneCaption(TAB_HINTS[currentTab]);
     rebuild();
   });
 });
 
+// Per-tab caption HTML. Used for both the prominent #sceneCaption (above
+// the canvas) and the smaller footer hint. Keep these in plain language —
+// students reading these don't know what "Lagrange remainder" means yet.
+const TAB_HINTS = {
+  A: 'Drag the <b>Order n</b> slider — each new polynomial bends a little more, until it hugs the gold curve.',
+  B: '<b>Pink band</b> = how wrong the polynomial actually is. <b>Gold dashed lines</b> = how wrong it <em>could</em> be at worst. Shrink the <b>window</b> to shrink the worst-case promise.',
+  C: 'Inside the <b>blue zone</b> the polynomials follow the curve. Outside, they <em>run away</em>. Drag the order up to watch them slam into the edges past x = ±R.',
+  D: 'Drag <b>Center a</b> to slide the polynomial along the curve — it always fits at the gold dot. Snap to 0 for the special case called <b>Maclaurin</b>.',
+};
+
 document.getElementById('orderSlider').addEventListener('input', e => {
+  // Manual slider input cancels in-flight play so they don't fight.
+  if (playTimer && playKind === 'order') stopPlay();
   order = parseInt(e.target.value, 10);
   document.getElementById('lblOrder').textContent = String(order);
   rebuild();
 });
 
 document.getElementById('centerSlider').addEventListener('input', e => {
+  if (playTimer && playKind === 'center') stopPlay();
   center = parseFloat(e.target.value);
   document.getElementById('lblCenter').textContent = center.toFixed(2);
   rebuild();
@@ -1188,21 +1277,26 @@ function stopPlay() {
   if (playTimer) {
     clearInterval(playTimer);
     playTimer = null;
+    playKind = null;
     document.getElementById('playBtn').textContent = '▶  play';
   }
 }
 
 document.getElementById('playBtn').addEventListener('click', () => {
   if (playTimer) { stopPlay(); return; }
+  // Tab B has no play action — the button is hidden there, so this is a guard.
+  if (currentTab === 'B') return;
   const speed = parseFloat(document.getElementById('speedSel').value);
   document.getElementById('playBtn').textContent = '⏸  pause';
-  // Tabs A and C: sweep order from 0 upward.
-  // Tab D: sweep center across the function's natural window.
-  // Tab B: no play (would conflict with the bound-pinch teach).
+  // Tabs A and C: sweep order from 0 upward (or restart from 0 if at max).
+  // Tab D: sweep center across the function's natural window from defaultA→defaultB.
   if (currentTab === 'A' || currentTab === 'C') {
+    playKind = 'order';
     const interval = Math.max(60, 220 * speed);
-    let n = 0;
     const maxN = parseInt(document.getElementById('orderSlider').max, 10);
+    // Start from 0 if at max, otherwise resume from current position so a
+    // half-played animation continues rather than restarting.
+    let n = order >= maxN ? 0 : order;
     playTimer = setInterval(() => {
       order = n;
       document.getElementById('orderSlider').value = String(n);
@@ -1212,6 +1306,7 @@ document.getElementById('playBtn').addEventListener('click', () => {
       if (n > maxN) stopPlay();
     }, interval);
   } else if (currentTab === 'D') {
+    playKind = 'center';
     const p = PRESETS[currentPreset];
     const interval = Math.max(40, 100 * speed);
     const steps = 80;
@@ -1225,41 +1320,91 @@ document.getElementById('playBtn').addEventListener('click', () => {
       i++;
       if (i > steps) stopPlay();
     }, interval);
-  } else {
-    // Tab B has no play action.
-    stopPlay();
   }
 });
 
-// Snap-to-zero for Tab D — instant jump (background tabs throttle setInterval
-// too aggressively to ease cleanly), then a 1.6s flash of the Maclaurin
-// callout via Web Animations API (immune to throttling).
+// Snap-to-zero for Tab D — animates the center back to 0 with ease-out cubic,
+// then flashes the Maclaurin callout. We drive the easing off a hidden DOM
+// element animated via Web Animations API (throttle-resistant, unlike rAF
+// or setInterval in background tabs); each timeupdate frame mirrors the
+// element's progress into the `center` state.
+const snapDriver = document.createElement('div');
+snapDriver.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+document.body.appendChild(snapDriver);
+
 document.getElementById('snapBtn').addEventListener('click', () => {
   stopPlay();
-  center = 0;
-  document.getElementById('centerSlider').value = '0';
-  document.getElementById('lblCenter').textContent = '0.00';
-  rebuild();
-  const flash = document.getElementById('maclaurinFlash');
-  if (flash && flash.animate) {
-    flash.animate(
-      [
-        { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
-        { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.15 },
-        { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.85 },
-        { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
-      ],
-      { duration: 1800, easing: 'ease-out', fill: 'forwards' }
-    );
+  const start = center;
+  if (Math.abs(start) < 0.005) {
+    flashMaclaurin();
+    return;
   }
+  // Drive easing via WAAPI on a phantom element (smooth, no rAF needed).
+  // Read the eased value through getComputedStyle inside BOTH a rAF loop
+  // (smooth in visible tabs) AND a setInterval (guaranteed completion in
+  // background tabs where rAF is throttled). Each tick is idempotent so
+  // double-pumping at the boundary is harmless.
+  const dur = 450, t0 = performance.now();
+  snapDriver.animate(
+    [{ opacity: 0 }, { opacity: 1 }],
+    { duration: dur, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)', fill: 'forwards' }
+  );
+  let done = false;
+  function step() {
+    if (done) return;
+    const t = Math.min(1, (performance.now() - t0) / dur);
+    const eased = parseFloat(getComputedStyle(snapDriver).opacity);
+    const e = isFinite(eased) ? eased : t;
+    center = start * (1 - e);
+    document.getElementById('centerSlider').value = String(center);
+    document.getElementById('lblCenter').textContent = center.toFixed(2);
+    rebuild();
+    if (t >= 1) {
+      done = true;
+      clearInterval(safety);
+      center = 0;
+      document.getElementById('centerSlider').value = '0';
+      document.getElementById('lblCenter').textContent = '0.00';
+      rebuild();
+      flashMaclaurin();
+    }
+  }
+  // rAF loop for smooth foreground animation.
+  function rafTick() { if (!done) { step(); if (!done) requestAnimationFrame(rafTick); } }
+  requestAnimationFrame(rafTick);
+  // Interval safety net for throttled background tabs.
+  const safety = setInterval(step, 30);
 });
+
+function flashMaclaurin() {
+  const flash = document.getElementById('maclaurinFlash');
+  if (!flash || !flash.animate) return;
+  flash.animate(
+    [
+      { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
+      { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.15 },
+      { opacity: 1, transform: 'translateX(-50%) translateY(0)', offset: 0.85 },
+      { opacity: 0, transform: 'translateX(-50%) translateY(-12px)' },
+    ],
+    { duration: 1800, easing: 'ease-out', fill: 'forwards' }
+  );
+}
 
 document.getElementById('resetBtn').addEventListener('click', () => {
   stopPlay();
   const p = PRESETS[currentPreset];
   center = p.defaultCenter;
+  order = 5;
+  intervalLo = -1.5;
+  intervalHi = 1.5;
   document.getElementById('centerSlider').value = String(center);
   document.getElementById('lblCenter').textContent = center.toFixed(2);
+  document.getElementById('orderSlider').value = '5';
+  document.getElementById('lblOrder').textContent = '5';
+  document.getElementById('intervalLoSlider').value = '-1.5';
+  document.getElementById('intervalHiSlider').value = '1.5';
+  document.getElementById('lblInterval').textContent = '[−1.50, 1.50]';
+  needsCameraFit = true;
   rebuild();
 });
 
@@ -1282,6 +1427,7 @@ document.getElementById('customApply').addEventListener('click', () => {
       document.querySelector('.presets button[data-preset="custom"]').classList.add('active');
       currentPreset = 'custom';
     }
+    needsCameraFit = true;
     rebuild();
   } catch (e) {
     errEl.textContent = e.message;
