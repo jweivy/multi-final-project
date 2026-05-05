@@ -2,6 +2,34 @@
 
 Context for Claude Code when working in this repo.
 
+## ⭐ Core principle: user-first
+
+**Usability is the most important thing in this project.** Everything else — code
+elegance, math rigor, file structure, framework choice — is secondary. The audience
+is high-school students who are seeing these ideas for the first time. If a polished
+abstraction makes the math harder to read, choose the legible thing.
+
+Concretely:
+- **Math must look like real math.** Stacked fractions, proper exponents, the actual
+  symbols. No `x^3` in display text — `x³`. No `5.79e-7` in the UI — `5.79 × 10⁻⁷`.
+  KaTeX is loaded on `series.html` for the polynomial readouts and formula previews;
+  use it (via `polynomialToLatex` + `renderMath`) for any new equation display.
+- **Plain language beats correct jargon.** Captions and labels read for someone who
+  doesn't yet know what "Lagrange remainder" or "convergence radius" means. Save the
+  technical name for once they've seen the picture.
+- **Show concrete numbers, not abstractions.** "Matches f(x) within 0.05 from x = −2.20
+  to x = 2.20" beats "the polynomial converges in some neighborhood of a." A number
+  the student can watch change is worth more than a precise statement they can't read.
+- **One click should do something.** Anything that requires reading a paragraph before
+  it makes sense is a UX failure. Prioritize: drag a slider → see the picture move.
+- **No invisible state.** If the app is doing something educationally meaningful (like
+  auto-switching to a finite-R preset on Tab C), tell the user; don't let the picture
+  silently change. Captions, hints, and step-by-step "Try this →" pills exist for this.
+
+When in doubt: open the page as a 16-year-old who hasn't seen this material before.
+Did the math just become readable? Does the next thing to try feel obvious? If yes,
+ship it. If not, keep polishing.
+
 ## What this is
 
 An interactive explorer for high-school multivariable / calc-2 topics: **shell method**, **washer method**, and **Taylor series** so far. Built as a final project; Julian + 3 teammates collaborate via GitHub.
@@ -60,6 +88,12 @@ A 2D Taylor/Maclaurin explorer with four tabs sharing one chassis. Spec lives at
 5. **Tab bar dispatches to four scene builders** (`buildTabA`, `buildTabB`, etc.) that each add geometry to the shared `stage` group. `rebuild()` disposes the stage and calls the right builder. Same pattern as the shell explorer's `rebuild`.
 6. **Y-axis clipping in `clipY`** is critical — high-order polynomials shoot to ±∞ outside the convergence radius and would crush the rest of the scene. Clip everything to slightly outside the visible y-range so the polynomial visibly slams into the viewport edge.
 7. **Halo trick for stroke weight:** Three.js `Line` ignores `linewidth` on most platforms, so the gold curve and active polynomial each get a translucent halo line drawn at a slight z-offset behind the crisp inner line. Cheap and effective.
+8. **KaTeX for math display:** loaded from CDN in `<head>` (synchronous, ~280KB). The polynomial readouts in Tabs A and D, plus the formula line under each preset's name, render via `katex.render(...)`. Helpers in the script:
+   - `rationalize(x, allowFactorials)` — snaps a coefficient to p/q if it's close to a tidy rational. Two-pass: small denoms loose tolerance (catches numeric-derivative noise on ±1 / ±2), then factorial denoms tight tolerance (only for sin/cos/exp/ln1p **at a=0**, where coefficients are exactly 1/n!).
+   - `polynomialToLatex(coeffs, a, presetKey)` — builds a LaTeX string with stacked fractions for rational coefficients, `× 10ⁿ` for tiny non-rational ones (never bare `5.79e-7`), and proper minus signs.
+   - `renderMath(el, latex, displayMode)` — wraps `katex.render` with a plain-text fallback if KaTeX failed to load.
+   - `prettyNumber(v)` — HTML version (with `<sup>`) for inline numbers in Tab B's error readout. Use this anywhere you'd otherwise show `v.toExponential(2)`.
+   - **Don't** call `katex.render` directly — go through `renderMath` so the offline fallback works.
 
 **Tab status — all four shipped:**
 - **A (polynomial stack):** order slider, play, live formula readout.
@@ -131,10 +165,12 @@ When extending the app, in order of "least likely to break things":
 
 ## Things to avoid
 
-- **Don't import packages.** No npm, no bundlers. Three.js comes from `unpkg` via the importmap. If you need a math library, add it the same way.
+- **Don't import packages.** No npm, no bundlers. Three.js comes from `unpkg` via the importmap; KaTeX from `jsdelivr` via plain `<link>` and `<script>`. If you need a math library, add it the same way.
 - **Don't use `eval`** outside of `compileExpression`. The `new Function` + `with (Math)` pattern is intentional — it's scoped, and rewriting `^` → `**` first makes power notation feel natural to kids.
 - **Don't add framework dependencies** (React, Vue, etc.). The whole point is "open the file, it works."
 - **Don't auto-take `|f(x)|` for volume.** The signed integral is intentional — the red shells visually pair with the negative number to teach what subtraction means in this context.
+- **Don't show raw scientific notation in the UI** (no `1.73e-7`). Run numbers through `prettyNumber()` for HTML or `decimalLatex()` for KaTeX. Users see `1.73 × 10⁻⁷`, not e-notation. (See **user-first principle** at the top.)
+- **Don't show `x^5` in any user-facing string.** Either render via KaTeX (preferred — gives proper exponent typesetting) or use `toSuperscript(5)` for plain text. Same for subscripts via `toSubscript`.
 
 ## Common edits
 
@@ -150,7 +186,14 @@ When extending the app, in order of "least likely to break things":
 
 (Picking this back up — read this section before doing anything substantive.)
 
-**Status as of last edit:** Three explorer pages live (shell, washer, series). The series page has all four tabs implemented and verified — A (polynomial stack), B (error bounds), C (radius of convergence), D (center / Maclaurin). Landing page (`index.html`) has three method cards under the broadened title "Calculus, visualized."
+**Status as of last edit (2026-05-03):** Three explorer pages live (shell, washer, series). The series page has all four tabs implemented and verified — A (polynomial stack), B (error bounds), C (radius of convergence), D (center / Maclaurin). Landing page (`index.html`) has three method cards under the broadened title "Calculus, visualized."
+
+**Last working session — clarity pass (commit `f6e3b4c`):** Julian said "a and b are making me more confused" and that the play button didn't work. I shipped a three-pass cleanup:
+- **Bugs fixed:** play button hidden on Tab B (it was meaningless there); Tab C auto-switches to `1/(1+x²)` on entry (sin/exp have R=∞ → Tab C looked broken); snap-to-zero in Tab D now uses WAAPI + rAF + setInterval(30ms) safety net so it animates even when the tab is background-throttled; camera no longer jitters during slider drag (`needsCameraFit` flag — only set true on tab/preset/custom-apply/reset, consumed by `fitCameraY`); slider input cancels conflicting play loop via `playKind` tracker; reset and replay behave properly.
+- **Pedagogy:** added `#sceneCaption` div above the canvas with plain-language `TAB_HINTS` per tab; slider tooltips on Order/Center/Window; Tab B readout decoded — replaces "M = 1.7e+0 / bound = 3.1e-2 / actual = 6.5e-3" with "worst-case error promised: 0.0316 / actual worst error: 0.0065 / (actual is 20.6% of the worst case) / M = 1.70 (worst slope of derivative #n+1)". Friendly `fmt()` keeps numbers in fixed notation between 0.001 and 9999, scientific outside.
+- **Color story:** Tab B — gold = "the worst-case promise" (envelope + bound verticals), pink (`#ff7eb6`) = actual error band; Tab C zones brightened from 0.10 dark colors to 0.18-0.22 `#4a7afd` / `#ff5e5e`; legend swatches updated.
+
+**Waiting on Julian to test in a real browser.** The preview tool's screenshot tends to hang against the rAF loop, so visual verification means opening `http://localhost:8765/series.html` (start the server with `py -3.13 -m http.server 8765 --directory .`). If he reports more confusion, ask him which tab and what specifically reads wrong before changing anything — this codebase is small enough that targeted edits beat broad rewrites.
 
 **Pending — Julian still needs to give me three GitHub usernames** so I can fire the collaborator invites with `gh api -X PUT /repos/jweivy/multi-final-project/collaborators/USERNAME -f permission=push`. He hasn't shared them yet. Don't add anyone without confirmation. As soon as he sends the names, the command above does it. The active gh auth is `jweivy` (verified via `gh auth status`).
 
