@@ -599,6 +599,13 @@ function frameCamera() {
   // shows depth. Angle chosen empirically to read clearly on the disk-sqrt
   // default before any user interaction.
   camera.position.set(midX + dist * 0.55, dist * 0.55, dist * 0.7);
+  camera.near = dist * 0.01;
+  camera.far = dist * 10;
+  camera.updateProjectionMatrix();
+  if (scene.fog) {
+    scene.fog.near = dist * 0.6;
+    scene.fog.far = dist * 2.0;
+  }
   camera.lookAt(controls.target);
   controls.update();
 }
@@ -700,10 +707,10 @@ document.querySelectorAll('.presets button').forEach(b => {
     document.querySelectorAll('.presets button').forEach(x =>
       x.classList.toggle('active', x === b));
     activePresetKey = b.dataset.preset;
-    shellCount = 0;
-    sweepAngle = 0;
-    shellSlider.value = 0;
-    angleSlider.value = 0;
+    shellCount = 12;
+    sweepAngle = Math.PI * 2;
+    shellSlider.value = 12;
+    angleSlider.value = 360;
     customForm.classList.toggle('shown', activePresetKey === 'custom');
     if (activePresetKey === 'custom') {
       applyCustom();
