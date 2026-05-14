@@ -339,6 +339,11 @@ function compileExpression(raw) {
   let s = raw.trim().toLowerCase();
   s = s.replace(/π/g, 'pi');
   s = s.replace(/\^/g, '**');
+  // Insert * for implicit multiplication so kids can write 2x, 3sin(x), 2(x+1),
+  // (x+1)(x-1) the way they would on paper. The negative-lookahead on the first
+  // rule skips scientific notation like 1e-3 so we don't break it.
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-z(])/g, '$1*$2');
   // Disallow bare `=` or `;` to avoid surprise multi-statement bodies
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
   let fn;

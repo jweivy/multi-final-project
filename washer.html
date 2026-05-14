@@ -351,6 +351,10 @@ function compileExpression(raw) {
   let s = String(raw).trim().toLowerCase();
   if (!s) throw new Error('expression is empty');
   s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  // Insert * for implicit multiplication: 2x → 2*x, 3sin(x) → 3*sin(x),
+  // (x+1)(x-1) → (x+1)*(x-1). Skip scientific notation like 1e-3.
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-z(])/g, '$1*$2');
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
   let fn;
   try {
