@@ -993,12 +993,6 @@ function drawIntersectionMarkers(mainInterval) {
     textAlign(theta < PI / 2 || theta > PI ? LEFT : RIGHT, BOTTOM);
     const ox = (theta < PI / 2 || theta > PI) ? 12 : -12;
     text(`θ = ${fmtAngleText(theta)}`, mx(x) + ox, my(y) - 10);
-    // ray from origin
-    stroke('rgba(255, 209, 102, 0.45)'); strokeWeight(1);
-    drawingContext.setLineDash([4, 4]);
-    line(mx(0), my(0), mx(Math.cos(theta) * (Math.max(Math.abs(VIEW.xMin), Math.abs(VIEW.xMax)) * 1.05)),
-                       my(Math.sin(theta) * (Math.max(Math.abs(VIEW.yMin), Math.abs(VIEW.yMax)) * 1.05)));
-    drawingContext.setLineDash([]);
   }
 }
 function fmtAngleText(rad) {
