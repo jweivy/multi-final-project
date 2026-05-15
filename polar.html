@@ -379,29 +379,67 @@ function simpson(f, a, b, n = 600) {
 
 // Compute area inside outer, outside inner, over [a, b] — but only where outer > inner.
 // Returns { intervals: [[θ₁,θ₂], …], totalArea }
-// Clamp r to 0: in polar convention r < 0 means the curve is in the opposite
-// direction at that θ, so at this θ the curve isn't bounding the region we
-// shade. Treat as r = 0. This is the standard interpretation for AP-style
-// "inside outer, outside inner" problems when one curve's natural domain is
-// narrower than the integration range (e.g. inner = sin θ on [0, 2π]).
-const clampR = (fn) => (t) => Math.max(0, fn(t));
+// Build an angle-indexed "effective radius" lookup θ → max|r| for a polar
+// curve. We sample the curve over its parameter range [a, b] and, for every
+// sample, compute the **plot angle** — which is the parameter t if r ≥ 0, or
+// t + π if r < 0 (the standard polar convention for negative radii). We
+// bucket by plot angle and keep the largest |r|. Calling the result with an
+// angle θ returns the outermost point of the visible curve at that angle.
+//
+// Why this matters: curves like r = sin(t)·cos(t) have four visible petals
+// over [0, 2π], but at any given parameter t, the curve is in only one petal
+// — its other petals come from *different* parameter values whose r happens
+// to be negative. A parameter-indexed inner(t) misses those, so the shaded
+// "outside inner" fill leaks into petals that visibly exist.
+function buildAngleRadiusFn(fn, a, b, buckets = 1440) {
+  const arr = new Float64Array(buckets);
+  const N = 12000;
+  const TWO_PI = Math.PI * 2;
+  for (let i = 0; i <= N; i++) {
+    const t = a + (b - a) * i / N;
+    const r = fn(t);
+    if (!isFinite(r)) continue;
+    const plot = r >= 0 ? t : t + Math.PI;
+    const nAng = ((plot % TWO_PI) + TWO_PI) % TWO_PI;
+    const bk = Math.floor(nAng / TWO_PI * buckets) % buckets;
+    const ar = Math.abs(r);
+    if (ar > arr[bk]) arr[bk] = ar;
+  }
+  return (theta) => {
+    const n = ((theta % TWO_PI) + TWO_PI) % TWO_PI;
+    const bk = Math.floor(n / TWO_PI * buckets) % buckets;
+    return arr[bk];
+  };
+}
 
-function computeBetweenArea(outer, inner, a, b) {
-  const oC = clampR(outer), iC = clampR(inner);
-  // Use the clamped functions so the intersection / integration math agrees
-  // with what we render.
-  const ints = findIntersections(oC, iC, a, b);
-  const bds = [a, ...ints, b];
+// Plot angle of a curve at parameter t (for curves with possible negative r).
+function plotAngleOf(fn, t) {
+  return fn(t) >= 0 ? t : t + Math.PI;
+}
+
+// Compute area between two curves via the angle-indexed effective radii.
+// Returns the parameter sub-intervals where outer² > effInner² (for the
+// integration / sweep), and the total area.
+function computeBetweenArea(outer, innerByAngle, a, b) {
+  const integrand = (t) => {
+    const oR = Math.max(0, outer(t));
+    const iR = innerByAngle(plotAngleOf(outer, t));
+    return Math.max(0, oR * oR - iR * iR);
+  };
+  // Walk to find regions where integrand > 0 (sweep displays those).
+  const N = 600;
+  const dx = (b - a) / N;
   const intervals = [];
-  for (let i = 0; i < bds.length - 1; i++) {
-    const lo = bds[i], hi = bds[i + 1];
-    const mid = (lo + hi) / 2;
-    if (oC(mid) > iC(mid)) intervals.push([lo, hi]);
+  let inRegion = false, regStart = a;
+  for (let i = 0; i <= N; i++) {
+    const t = a + i * dx;
+    const positive = integrand(t) > 1e-9;
+    if (positive && !inRegion) { regStart = t; inRegion = true; }
+    else if (!positive && inRegion) { intervals.push([regStart, t]); inRegion = false; }
   }
+  if (inRegion) intervals.push([regStart, b]);
   let total = 0;
-  for (const [lo, hi] of intervals) {
-    total += 0.5 * simpson((t) => oC(t) ** 2 - iC(t) ** 2, lo, hi);
-  }
+  for (const [lo, hi] of intervals) total += 0.5 * simpson(integrand, lo, hi);
   return { intervals, totalArea: total };
 }
 
@@ -616,13 +654,21 @@ function recomputeActive() {
   const innerFn = p.mode === 'single' ? ((t) => 0) : p.inner.fn;
   const [a, b] = p.range;
 
+  // Angle-indexed effective inner: at each plot-angle θ, the max |r| of the
+  // inner curve at that angle (across all parameter values). This makes the
+  // shaded fill respect the *visible* inner region — even when the curve
+  // has petals plotted from negative-r parameter values in other quadrants.
+  const innerByAngle = p.mode === 'single'
+    ? () => 0
+    : buildAngleRadiusFn(innerFn, a, b);
+
   // intervals where the actual integration happens
   let intervals, totalArea;
   if (p.mode === 'single') {
     intervals = [[a, b]];
-    totalArea = 0.5 * simpson((t) => outerFn(t) ** 2, a, b);
+    totalArea = 0.5 * simpson((t) => Math.max(0, outerFn(t)) ** 2, a, b);
   } else {
-    const res = computeBetweenArea(outerFn, innerFn, a, b);
+    const res = computeBetweenArea(outerFn, innerByAngle, a, b);
     intervals = res.intervals.length ? res.intervals : [[a, b]];
     totalArea = res.totalArea;
   }
@@ -638,7 +684,7 @@ function recomputeActive() {
   }
   VIEW = bboxOfPolarCurves(curves, [a, b]);
 
-  computed = { intervals, mainInterval: main, totalArea, outerFn, innerFn, range: [a, b] };
+  computed = { intervals, mainInterval: main, totalArea, outerFn, innerFn, innerByAngle, range: [a, b] };
 
   // update math panel + question text
   renderMathForPreset(p, computed);
@@ -761,7 +807,10 @@ function draw() {
 
   if (!computed) return;
   const p = PRESETS[activePresetKey];
-  const { outerFn, innerFn, mainInterval, totalArea, range } = computed;
+  const { outerFn, innerFn, innerByAngle, mainInterval, totalArea, range } = computed;
+  // For shading and the dA fan, the inner boundary is indexed by *plot
+  // angle*, not parameter — this is the curve's visible silhouette.
+  const innerForShade = innerByAngle;
 
   // Chapter 'draw' — trace outer then inner over [range[0], range[1]]
   const drawProg = within(CH.draw) ? progress(CH.draw) : (past(CH.draw) ? 1 : 0);
@@ -784,17 +833,17 @@ function draw() {
   }
 
   // Chapter 'slice' — tutorial single slice with labels
-  if (within(CH.slice)) drawTutorialSlice(p, outerFn, innerFn, mainInterval, progress(CH.slice));
+  if (within(CH.slice)) drawTutorialSlice(p, outerFn, innerForShade, mainInterval, progress(CH.slice));
 
   // Chapter 'sweep' — animate slice sweeping across mainInterval, fill behind
   let sweptTheta = null;
   if (within(CH.sweep)) {
     const pp = easeInOut(progress(CH.sweep));
     sweptTheta = mainInterval[0] + pp * (mainInterval[1] - mainInterval[0]);
-    drawAccumulatedRegion(outerFn, innerFn, mainInterval[0], sweptTheta, p.mode);
-    drawSweepingSlice(outerFn, innerFn, sweptTheta, p.mode);
+    drawAccumulatedRegion(outerFn, innerForShade, mainInterval[0], sweptTheta, p.mode);
+    drawSweepingSlice(outerFn, innerForShade, sweptTheta, p.mode);
   } else if (past(CH.sweep)) {
-    drawAccumulatedRegion(outerFn, innerFn, mainInterval[0], mainInterval[1], p.mode);
+    drawAccumulatedRegion(outerFn, innerForShade, mainInterval[0], mainInterval[1], p.mode);
   }
 
   // Chapter 'answer' — flourish ripple
@@ -944,12 +993,6 @@ function drawIntersectionMarkers(mainInterval) {
     textAlign(theta < PI / 2 || theta > PI ? LEFT : RIGHT, BOTTOM);
     const ox = (theta < PI / 2 || theta > PI) ? 12 : -12;
     text(`θ = ${fmtAngleText(theta)}`, mx(x) + ox, my(y) - 10);
-    // ray from origin
-    stroke('rgba(255, 209, 102, 0.45)'); strokeWeight(1);
-    drawingContext.setLineDash([4, 4]);
-    line(mx(0), my(0), mx(Math.cos(theta) * (Math.max(Math.abs(VIEW.xMin), Math.abs(VIEW.xMax)) * 1.05)),
-                       my(Math.sin(theta) * (Math.max(Math.abs(VIEW.yMin), Math.abs(VIEW.yMax)) * 1.05)));
-    drawingContext.setLineDash([]);
   }
 }
 function fmtAngleText(rad) {
@@ -1109,11 +1152,14 @@ function updateAreaCounter(p, currTheta) {
   if (t < CH.sweep.a) v = 0;
   else if (currTheta !== null) {
     const [iA] = computed.mainInterval;
-    const innerFn = p.mode === 'single' ? ((t) => 0) : computed.innerFn;
-    // Match the area math used for the final total: clamp r ≥ 0 so the live
-    // counter agrees with what's shaded.
-    const oC = clampR(computed.outerFn), iC = clampR(innerFn);
-    v = 0.5 * simpson((th) => oC(th) ** 2 - iC(th) ** 2, iA, currTheta);
+    // Match the angle-indexed integration used for the final total.
+    const outerFn = computed.outerFn;
+    const innerByAngle = computed.innerByAngle;
+    v = 0.5 * simpson((th) => {
+      const oR = Math.max(0, outerFn(th));
+      const iR = innerByAngle(plotAngleOf(outerFn, th));
+      return Math.max(0, oR * oR - iR * iR);
+    }, iA, currTheta);
   } else v = computed.totalArea;
   document.getElementById('areaVal').textContent = v.toFixed(3);
 }
