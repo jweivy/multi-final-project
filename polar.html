@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polar Area · Animated Solutions</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --rose: #ff7eb6;
+    --blue: #6aa9ff;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto auto; height: 100%; }
+  #app > header { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; }
+  #app > #caption { grid-row: 4; }
+  #app > footer { grid-row: 5; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  /* Custom form */
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 160px;
+  }
+  #customForm input[type=text].small { width: 70px; }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 8px; font-family: inherit; font-size: 12px;
+    outline: none; cursor: pointer;
+  }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  /* Scene */
+  #scene-wrap {
+    position: relative; overflow: hidden;
+    display: flex; justify-content: center; align-items: stretch;
+  }
+  #scene-flex { display: flex; flex-direction: row; width: 100%; min-height: 0; }
+  #canvas-container {
+    position: relative; flex: 1 1 auto; min-width: 0;
+    display: flex; justify-content: center; align-items: center;
+  }
+  canvas { display: block; }
+
+  /* Math side panel */
+  #math-panel {
+    width: 350px; flex: 0 0 350px;
+    padding: 18px 18px 18px 14px;
+    border-left: 1px solid var(--pill-border);
+    background: rgba(14, 17, 22, 0.5);
+    overflow-y: auto;
+  }
+  .question-block {
+    background: rgba(255, 209, 102, 0.07);
+    border: 1px solid rgba(255, 209, 102, 0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 13px; line-height: 1.4; color: var(--ink);
+  }
+  .question-block b { color: var(--gold); font-weight: bold; }
+  .math-block {
+    background: var(--pill);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    opacity: 0.4;
+    transition: opacity 0.4s, border-color 0.4s, box-shadow 0.4s;
+  }
+  .math-block.active {
+    opacity: 1;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.20);
+  }
+  .math-block.done { opacity: 0.8; }
+  .math-block .ml-label {
+    font-size: 10.5px; color: var(--soft); text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 5px;
+  }
+  .math-block .ml-content { font-size: 13.5px; color: var(--ink); }
+  .math-block .ml-content .katex { font-size: 1.02em; }
+  .math-block .ml-content .katex-display { margin: 4px 0; }
+
+  .live-area {
+    background: var(--pill);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px; padding: 12px 16px;
+    margin-bottom: 10px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    transition: border-color 0.4s;
+  }
+  .live-area.active { border-color: var(--rose); }
+  .live-area .la-label { font-size: 12px; color: var(--soft); }
+  .live-area .la-value {
+    font-family: "Courier New", monospace; font-size: 18px;
+    color: var(--gold); font-weight: bold;
+  }
+
+  /* Caption */
+  #caption {
+    padding: 12px 24px; background: rgba(255, 209, 102, 0.05);
+    border-top: 1px solid var(--pill-border);
+    border-bottom: 1px solid var(--pill-border);
+    text-align: center; font-style: italic; color: #ddd;
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #caption b { color: var(--gold); font-style: normal; font-weight: bold; }
+
+  /* Footer / controls */
+  footer {
+    padding: 12px 24px; display: grid;
+    grid-template-columns: auto 1fr auto auto; gap: 14px;
+    align-items: center;
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 18px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 6px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+
+  @media (max-width: 940px) {
+    #scene-flex { flex-direction: column; }
+    #math-panel { width: 100%; flex: 0 0 auto; border-left: none; border-top: 1px solid var(--pill-border); max-height: 40vh; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Polar Area</b> · animated solutions</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="bc-q2" class="active">BC Q2(B) · 2sin²θ vs ½</button>
+      <button data-preset="cardioid">cardioid vs circle</button>
+      <button data-preset="rose">rose petal</button>
+      <button data-preset="lemniscate">two-circle overlap</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>outer r(θ) =</label>
+    <input id="customOuter" type="text" value="2*sin(t)^2" placeholder="e.g. 2 + 2cos(t)">
+    <label>inner r(θ) =</label>
+    <input id="customInner" type="text" value="0.5" placeholder="0 for single curve">
+    <label>θ ∈ [</label>
+    <input id="customA" type="text" class="small" value="0">
+    <label>,</label>
+    <input id="customB" type="text" class="small" value="pi">
+    <label>]</label>
+    <label>mode</label>
+    <select id="customMode">
+      <option value="between" selected>inside outer, outside inner</option>
+      <option value="single">single curve area</option>
+    </select>
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>t</b> for θ &nbsp;·&nbsp; functions: sin, cos, tan, sqrt, log, exp, abs &nbsp;·&nbsp; constants: pi, e &nbsp;·&nbsp; ^ for power</span>
+  </div>
+
+  <div id="scene-wrap">
+    <div id="scene-flex">
+      <div id="canvas-container"></div>
+      <aside id="math-panel">
+        <div class="question-block" id="qBlock">Loading…</div>
+        <div class="math-block" data-step="intersect">
+          <div class="ml-label">Step 1 — where do they meet?</div>
+          <div class="ml-content" id="m1"></div>
+        </div>
+        <div class="math-block" data-step="slice">
+          <div class="ml-label">Step 2 — one thin slice</div>
+          <div class="ml-content" id="m2"></div>
+        </div>
+        <div class="math-block" data-step="sweep">
+          <div class="ml-label">Step 3 — sum every slice</div>
+          <div class="ml-content" id="m3"></div>
+        </div>
+        <div class="live-area" id="liveArea">
+          <span class="la-label">running area</span>
+          <span class="la-value" id="areaVal">0.000</span>
+        </div>
+        <div class="math-block" data-step="answer">
+          <div class="ml-label">Step 4 — answer</div>
+          <div class="ml-content" id="m4"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="caption">Loading…</div>
+
+  <footer>
+    <button class="action" id="btnPlay">▶ play</button>
+    <input type="range" id="scrubber" min="0" max="1000" value="0">
+    <select class="speed-select" id="speedSel">
+      <option value="0.5">½×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1½×</option>
+      <option value="2">2×</option>
+    </select>
+    <button class="action ghost" id="btnRestart">↺ restart</button>
+  </footer>
+</div>
+
+<script>
+// =============================================================================
+// MATH HELPERS
+// =============================================================================
+const TAU = Math.PI * 2;
+const PI = Math.PI;
+
+// Compile a kid-friendly expression in `t` (theta) to a JS function.
+// Mirrors shell.html / washer.html's compileExpression but the variable is t.
+function compileExpression(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi');
+  s = s.replace(/\btheta\b/g, 't');  // allow students to write theta
+  s = s.replace(/\^/g, '**');
+  // implicit multiplication FIRST so 2pi/3sin(t)/(t+1)(t-1) all get *'s in.
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  // THEN resolve lowercase constants. `with(Math)` exposes PI/E uppercase
+  // only, so bare `pi`/`e` would otherwise be undefined after toLowerCase.
+  // Word boundaries protect 1e-3 (no boundary inside) and exp/exp(...).
+  s = s.replace(/\bpi\b/g, 'PI');
+  s = s.replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('t', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parentheses and operators'); }
+  for (const sample of [0.01, 0.5, 1, 2, 3]) {
+    const v = fn(sample);
+    if (typeof v !== 'number' || !isFinite(v)) {
+      throw new Error(`gives a non-number at θ = ${sample}`);
+    }
+  }
+  return fn;
+}
+
+// Parse a constant expression like "pi/6" or "2*pi" into a number.
+function compileConstant(raw) {
+  const fn = compileExpression(String(raw));
+  const v = fn(0);
+  if (!isFinite(v)) throw new Error('bound is not a finite number');
+  return v;
+}
+
+// Find θ in [a, b] where outer(θ) − inner(θ) = 0. Returns sorted array.
+function findIntersections(outer, inner, a, b) {
+  const f = (t) => outer(t) - inner(t);
+  const N = 600;
+  const dx = (b - a) / N;
+  const roots = [];
+  let xPrev = a, fPrev = f(a);
+  for (let i = 1; i <= N; i++) {
+    const x = a + i * dx;
+    const fx = f(x);
+    if (fPrev === 0) { roots.push(xPrev); }
+    else if (fPrev * fx < 0) {
+      // bisection
+      let lo = xPrev, hi = x;
+      for (let k = 0; k < 50; k++) {
+        const mid = (lo + hi) / 2;
+        const fm = f(mid);
+        if (fm === 0) { lo = hi = mid; break; }
+        if (fPrev * fm < 0) hi = mid;
+        else { lo = mid; fPrev = fm; }
+      }
+      roots.push((lo + hi) / 2);
+    }
+    xPrev = x; fPrev = fx;
+  }
+  // de-duplicate close roots
+  const out = [];
+  for (const r of roots) {
+    if (out.length === 0 || Math.abs(r - out[out.length - 1]) > 1e-4) out.push(r);
+  }
+  return out;
+}
+
+// Simpson's rule for ∫[a,b] f dθ.
+function simpson(f, a, b, n = 600) {
+  if (a === b) return 0;
+  if (n % 2) n++;
+  const h = (b - a) / n;
+  let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(a + i * h);
+  return s * h / 3;
+}
+
+// Compute area inside outer, outside inner, over [a, b] — but only where outer > inner.
+// Returns { intervals: [[θ₁,θ₂], …], totalArea }
+// Clamp r to 0: in polar convention r < 0 means the curve is in the opposite
+// direction at that θ, so at this θ the curve isn't bounding the region we
+// shade. Treat as r = 0. This is the standard interpretation for AP-style
+// "inside outer, outside inner" problems when one curve's natural domain is
+// narrower than the integration range (e.g. inner = sin θ on [0, 2π]).
+const clampR = (fn) => (t) => Math.max(0, fn(t));
+
+function computeBetweenArea(outer, inner, a, b) {
+  const oC = clampR(outer), iC = clampR(inner);
+  // Use the clamped functions so the intersection / integration math agrees
+  // with what we render.
+  const ints = findIntersections(oC, iC, a, b);
+  const bds = [a, ...ints, b];
+  const intervals = [];
+  for (let i = 0; i < bds.length - 1; i++) {
+    const lo = bds[i], hi = bds[i + 1];
+    const mid = (lo + hi) / 2;
+    if (oC(mid) > iC(mid)) intervals.push([lo, hi]);
+  }
+  let total = 0;
+  for (const [lo, hi] of intervals) {
+    total += 0.5 * simpson((t) => oC(t) ** 2 - iC(t) ** 2, lo, hi);
+  }
+  return { intervals, totalArea: total };
+}
+
+// Sample a polar curve to get a math-coords bounding box.
+function bboxOfPolarCurves(curves, thetaRange, padFrac = 0.18) {
+  let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+  const [a, b] = thetaRange;
+  for (const c of curves) {
+    for (let i = 0; i <= 200; i++) {
+      const th = a + (b - a) * i / 200;
+      const r = c(th);
+      if (!isFinite(r)) continue;
+      const x = r * Math.cos(th), y = r * Math.sin(th);
+      if (x < xMin) xMin = x; if (x > xMax) xMax = x;
+      if (y < yMin) yMin = y; if (y > yMax) yMax = y;
+    }
+  }
+  // include origin to keep ½ visible
+  xMin = Math.min(xMin, 0); xMax = Math.max(xMax, 0);
+  yMin = Math.min(yMin, 0); yMax = Math.max(yMax, 0);
+  const dx = xMax - xMin, dy = yMax - yMin;
+  return {
+    xMin: xMin - dx * padFrac, xMax: xMax + dx * padFrac,
+    yMin: yMin - dy * padFrac, yMax: yMax + dy * padFrac
+  };
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PRESETS = {
+  'bc-q2': {
+    label: 'BC Q2(B) · 2sin²θ vs ½',
+    question: '<b>Curve C:</b> r(θ) = 2 sin²θ, <b>circle:</b> r = ½, both for 0 ≤ θ ≤ π. Find the area inside C but outside the circle.',
+    mode: 'between',
+    outer: { fn: (t) => 2 * Math.sin(t) ** 2, latex: '2\\sin^2\\theta', label: 'C: r = 2 sin²θ', color: 'gold' },
+    inner: { fn: (t) => 0.5, latex: '\\tfrac{1}{2}', label: 'r = ½', color: 'blue' },
+    range: [0, PI],
+  },
+  'cardioid': {
+    label: 'cardioid outside circle',
+    question: '<b>Cardioid:</b> r = 2 + 2 cos θ, <b>circle:</b> r = 2. Find the area inside the cardioid but outside the circle.',
+    mode: 'between',
+    outer: { fn: (t) => 2 + 2 * Math.cos(t), latex: '2 + 2\\cos\\theta', label: 'r = 2 + 2 cos θ', color: 'gold' },
+    inner: { fn: (t) => 2, latex: '2', label: 'r = 2', color: 'blue' },
+    range: [-PI / 2, PI / 2],
+  },
+  'rose': {
+    label: 'one petal of rose r = 2 sin(2θ)',
+    question: '<b>Rose curve:</b> r = 2 sin(2θ). Find the area of one petal (0 ≤ θ ≤ π/2).',
+    mode: 'single',
+    outer: { fn: (t) => 2 * Math.sin(2 * t), latex: '2\\sin(2\\theta)', label: 'r = 2 sin(2θ)', color: 'gold' },
+    range: [0, PI / 2],
+  },
+  'lemniscate': {
+    label: 'overlap of two circles',
+    question: '<b>Two polar circles:</b> r = 2 sin θ (upper) and r = 2 cos θ (right). Find the area of the region <b>inside both</b>.',
+    mode: 'between',
+    // For "inside both" the boundary is min(2sinθ, 2cosθ). We model it as:
+    //   outer = min(2sinθ, 2cosθ), inner = 0, mode = single
+    //   over θ ∈ [0, π/2]
+    // But we want to *teach* it as comparing the two curves, so we treat it
+    // as a "between" with outer = min(2sinθ, 2cosθ), inner = 0 — basically a
+    // single-curve area whose boundary is the minimum of two curves.
+    outer: {
+      fn: (t) => Math.min(2 * Math.sin(t), 2 * Math.cos(t)),
+      latex: '\\min(2\\sin\\theta,\\ 2\\cos\\theta)',
+      label: 'min boundary',
+      color: 'gold',
+    },
+    inner: { fn: (t) => 0, latex: '0', label: 'origin', color: 'blue' },
+    range: [0, PI / 2],
+    // also draw the two underlying circles for context
+    auxCurves: [
+      { fn: (t) => 2 * Math.sin(t), color: 'rgba(106, 169, 255, 0.45)', range: [0, PI], label: 'r = 2 sin θ' },
+      { fn: (t) => 2 * Math.cos(t), color: 'rgba(106, 169, 255, 0.45)', range: [-PI/2, PI/2], label: 'r = 2 cos θ' },
+    ],
+  },
+  'custom': {
+    label: 'custom',
+    question: 'Your own polar problem. Edit the form above.',
+    mode: 'between',
+    outer: { fn: (t) => 2 * Math.sin(t) ** 2, latex: '2\\sin^2\\theta', label: 'outer', color: 'gold' },
+    inner: { fn: (t) => 0.5, latex: '\\tfrac{1}{2}', label: 'inner', color: 'blue' },
+    range: [0, PI],
+  },
+};
+
+let activePresetKey = 'bc-q2';
+let computed = null;  // { intervals, totalArea, view }
+
+// =============================================================================
+// CHAPTERS — t ∈ [0, 1]
+// =============================================================================
+const CH = {
+  intro:     { a: 0.00, b: 0.06 },
+  draw:      { a: 0.06, b: 0.22 },
+  intersect: { a: 0.22, b: 0.40 },
+  slice:     { a: 0.40, b: 0.56 },
+  sweep:     { a: 0.56, b: 0.88 },
+  answer:    { a: 0.88, b: 1.00 },
+};
+function within(c) { return t >= c.a && t <= c.b; }
+function progress(c) { return Math.max(0, Math.min(1, (t - c.a) / (c.b - c.a))); }
+function past(c) { return t > c.b; }
+const easeInOut = (x) => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+
+// =============================================================================
+// COLORS
+// =============================================================================
+const C = {
+  bg: '#0e1116',
+  ink: '#e8e6df',
+  soft: '#7a8794',
+  gold: '#ffd166',
+  blue: '#6aa9ff',
+  rose: '#ff7eb6',
+  goldFill: 'rgba(255, 209, 102, 0.10)',
+  blueFill: 'rgba(106, 169, 255, 0.16)',
+  shade: 'rgba(255, 126, 182, 0.30)',
+  shadeEdge: '#ff7eb6',
+  grid: '#1a1d22',
+  axis: '#3a414a',
+};
+
+// =============================================================================
+// STATE
+// =============================================================================
+let t = 0;
+let playing = false;
+let speed = 1;
+let lastTime = 0;
+let p5Canvas = null;
+let W = 600, H = 600;
+let VIEW = { xMin: -1.4, xMax: 1.4, yMin: -0.3, yMax: 2.4 };
+const TOTAL_SECONDS = 26;
+
+// =============================================================================
+// SETUP
+// =============================================================================
+function setup() {
+  resizeCanvasToContainer();
+  p5Canvas = createCanvas(W, H);
+  p5Canvas.parent('canvas-container');
+  pixelDensity(window.devicePixelRatio || 1);
+  textFont('Georgia');
+  hookControls();
+  setActivePreset(activePresetKey);
+  lastTime = millis();
+  setTimeout(() => startPlaying(), 250);
+}
+function resizeCanvasToContainer() {
+  const cont = document.getElementById('canvas-container');
+  if (!cont) return;
+  const r = cont.getBoundingClientRect();
+  W = Math.max(360, Math.floor(r.width) - 12);
+  H = Math.max(360, Math.floor(r.height) - 12);
+  if (typeof resizeCanvas === 'function' && p5Canvas) resizeCanvas(W, H);
+}
+window.addEventListener('resize', () => resizeCanvasToContainer());
+
+function startPlaying() {
+  playing = true;
+  document.getElementById('btnPlay').textContent = '⏸ pause';
+  lastTime = millis();
+}
+function stopPlaying() {
+  playing = false;
+  document.getElementById('btnPlay').textContent = '▶ play';
+}
+
+function hookControls() {
+  document.getElementById('btnPlay').onclick = () => {
+    if (t >= 1) t = 0;
+    playing ? stopPlaying() : startPlaying();
+  };
+  document.getElementById('btnRestart').onclick = () => { t = 0; startPlaying(); };
+  document.getElementById('scrubber').oninput = (e) => {
+    t = +e.target.value / 1000;
+    stopPlaying();
+  };
+  document.getElementById('speedSel').onchange = (e) => { speed = +e.target.value; };
+  document.querySelectorAll('.presets button').forEach(b => {
+    b.onclick = () => setActivePreset(b.dataset.preset);
+  });
+  document.getElementById('customApply').onclick = applyCustom;
+  ['customOuter', 'customInner', 'customA', 'customB'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') applyCustom();
+    });
+  });
+}
+
+function setActivePreset(key) {
+  if (!PRESETS[key]) return;
+  activePresetKey = key;
+  document.querySelectorAll('.presets button').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === key);
+  });
+  document.getElementById('customForm').classList.toggle('shown', key === 'custom');
+  // recompute geometry + math for the new preset
+  recomputeActive();
+  // reset animation
+  t = 0;
+  startPlaying();
+}
+
+function recomputeActive() {
+  const p = PRESETS[activePresetKey];
+  const outerFn = p.outer.fn;
+  const innerFn = p.mode === 'single' ? ((t) => 0) : p.inner.fn;
+  const [a, b] = p.range;
+
+  // intervals where the actual integration happens
+  let intervals, totalArea;
+  if (p.mode === 'single') {
+    intervals = [[a, b]];
+    totalArea = 0.5 * simpson((t) => outerFn(t) ** 2, a, b);
+  } else {
+    const res = computeBetweenArea(outerFn, innerFn, a, b);
+    intervals = res.intervals.length ? res.intervals : [[a, b]];
+    totalArea = res.totalArea;
+  }
+
+  // pick the first interval as the "main" one for the sweep animation
+  const main = intervals[0] || [a, b];
+
+  // viewport — sample both outer and inner over [a, b]
+  const curves = [outerFn];
+  if (p.mode !== 'single') curves.push(innerFn);
+  if (p.auxCurves) {
+    for (const aux of p.auxCurves) curves.push(aux.fn);
+  }
+  VIEW = bboxOfPolarCurves(curves, [a, b]);
+
+  computed = { intervals, mainInterval: main, totalArea, outerFn, innerFn, range: [a, b] };
+
+  // update math panel + question text
+  renderMathForPreset(p, computed);
+  // caption baseline
+  document.getElementById('areaVal').textContent = '0.000';
+}
+
+// =============================================================================
+// MATH PANEL RENDERING
+// =============================================================================
+function K(el, latex, displayMode = false) {
+  if (!window.katex) { el.textContent = latex; return; }
+  try { katex.render(latex, el, { displayMode, throwOnError: false }); }
+  catch (e) { el.textContent = latex; }
+}
+function fmtAngle(rad) {
+  // try to recognize common multiples of pi
+  const candidates = [
+    { v: 0, s: '0' }, { v: PI / 6, s: '\\tfrac{\\pi}{6}' },
+    { v: PI / 4, s: '\\tfrac{\\pi}{4}' }, { v: PI / 3, s: '\\tfrac{\\pi}{3}' },
+    { v: PI / 2, s: '\\tfrac{\\pi}{2}' }, { v: 2 * PI / 3, s: '\\tfrac{2\\pi}{3}' },
+    { v: 3 * PI / 4, s: '\\tfrac{3\\pi}{4}' }, { v: 5 * PI / 6, s: '\\tfrac{5\\pi}{6}' },
+    { v: PI, s: '\\pi' }, { v: -PI / 2, s: '-\\tfrac{\\pi}{2}' },
+    { v: -PI / 6, s: '-\\tfrac{\\pi}{6}' },
+  ];
+  for (const c of candidates) if (Math.abs(rad - c.v) < 1e-3) return c.s;
+  return rad.toFixed(3);
+}
+
+function renderMathForPreset(p, comp) {
+  document.getElementById('qBlock').innerHTML = p.question;
+  // Step 1 — intersections
+  if (p.mode === 'single') {
+    K(document.getElementById('m1'),
+      `\\text{(single curve — no intersection needed)}\\\\ \\theta \\in [\\,${fmtAngle(p.range[0])},\\ ${fmtAngle(p.range[1])}\\,]`, true);
+  } else {
+    const [a, b] = comp.mainInterval;
+    // try to give a clean equation
+    K(document.getElementById('m1'),
+      `\\begin{aligned}
+        ${p.outer.latex} &= ${p.inner.latex} \\\\
+        \\theta &= ${fmtAngle(a)},\\ ${fmtAngle(b)}
+      \\end{aligned}`, true);
+  }
+  // Step 2 — dA formula
+  if (p.mode === 'single') {
+    K(document.getElementById('m2'),
+      `dA = \\tfrac{1}{2}\\,(${p.outer.latex})^2\\,d\\theta`, true);
+  } else {
+    K(document.getElementById('m2'),
+      `dA = \\tfrac{1}{2}\\Bigl((${p.outer.latex})^2 - (${p.inner.latex})^2\\Bigr)\\,d\\theta`, true);
+  }
+  // Step 3 — integral
+  const [a, b] = comp.mainInterval;
+  const aL = fmtAngle(a), bL = fmtAngle(b);
+  if (p.mode === 'single') {
+    K(document.getElementById('m3'),
+      `A = \\tfrac{1}{2}\\!\\int_{${aL}}^{${bL}}\\!(${p.outer.latex})^2\\,d\\theta`, true);
+  } else {
+    K(document.getElementById('m3'),
+      `A = \\tfrac{1}{2}\\!\\int_{${aL}}^{${bL}}\\!\\Bigl((${p.outer.latex})^2 - (${p.inner.latex})^2\\Bigr)\\,d\\theta`, true);
+  }
+  // Step 4 — answer
+  K(document.getElementById('m4'), `A \\approx \\mathbf{${comp.totalArea.toFixed(3)}}`, true);
+}
+
+function applyCustom() {
+  const errEl = document.getElementById('customError');
+  errEl.textContent = '';
+  const outerRaw = document.getElementById('customOuter').value;
+  const innerRaw = document.getElementById('customInner').value;
+  const aRaw = document.getElementById('customA').value;
+  const bRaw = document.getElementById('customB').value;
+  const mode = document.getElementById('customMode').value;
+  let outerFn, innerFn, a, b;
+  try { outerFn = compileExpression(outerRaw); }
+  catch (e) { errEl.textContent = 'outer: ' + e.message; return; }
+  if (mode === 'between') {
+    try { innerFn = compileExpression(innerRaw); }
+    catch (e) { errEl.textContent = 'inner: ' + e.message; return; }
+  } else {
+    innerFn = (t) => 0;
+  }
+  try { a = compileConstant(aRaw); }
+  catch (e) { errEl.textContent = 'lower bound: ' + e.message; return; }
+  try { b = compileConstant(bRaw); }
+  catch (e) { errEl.textContent = 'upper bound: ' + e.message; return; }
+  if (b <= a) { errEl.textContent = 'need lower < upper'; return; }
+
+  PRESETS.custom.outer = {
+    fn: outerFn, latex: outerRaw.trim() || 'r(\\theta)', label: 'outer', color: 'gold',
+  };
+  PRESETS.custom.inner = {
+    fn: innerFn, latex: mode === 'between' ? (innerRaw.trim() || '0') : '0', label: 'inner', color: 'blue',
+  };
+  PRESETS.custom.range = [a, b];
+  PRESETS.custom.mode = mode;
+  PRESETS.custom.question = mode === 'between'
+    ? `<b>Custom:</b> outer = ${outerRaw}, inner = ${innerRaw}, θ ∈ [${aRaw}, ${bRaw}]. Find the area inside outer but outside inner.`
+    : `<b>Custom:</b> r = ${outerRaw}, θ ∈ [${aRaw}, ${bRaw}]. Find the area enclosed.`;
+  setActivePreset('custom');
+}
+
+// =============================================================================
+// p5 DRAW LOOP
+// =============================================================================
+function draw() {
+  // advance time
+  const now = millis();
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (playing) {
+    t += (dt * speed) / TOTAL_SECONDS;
+    if (t >= 1) { t = 1; stopPlaying(); }
+    document.getElementById('scrubber').value = Math.round(t * 1000);
+  }
+
+  background(C.bg);
+  drawGridAndAxes();
+
+  if (!computed) return;
+  const p = PRESETS[activePresetKey];
+  const { outerFn, innerFn, mainInterval, totalArea, range } = computed;
+
+  // Chapter 'draw' — trace outer then inner over [range[0], range[1]]
+  const drawProg = within(CH.draw) ? progress(CH.draw) : (past(CH.draw) ? 1 : 0);
+  if (drawProg > 0 || past(CH.draw)) {
+    const rangeSpan = range[1] - range[0];
+    const traceMax = past(CH.draw) ? range[1] : range[0] + easeOut(Math.min(1, drawProg * 2)) * rangeSpan;
+    drawAuxCurves(p);
+    drawTracedCurve(outerFn, range[0], traceMax, C.gold, C.goldFill, 2.2);
+    if (p.mode !== 'single' && (drawProg > 0.5 || past(CH.draw))) {
+      const traceMax2 = past(CH.draw) ? range[1] : range[0] + easeOut(Math.min(1, (drawProg - 0.5) * 2)) * rangeSpan;
+      drawTracedCurve(innerFn, range[0], traceMax2, C.blue, C.blueFill, 2.0);
+    }
+    // labels appear when curves are mostly drawn
+    if (drawProg > 0.75 || past(CH.draw)) drawCurveLabels(p);
+  }
+
+  // Chapter 'intersect' — mark intersection points
+  if (t >= CH.intersect.a && p.mode !== 'single') {
+    drawIntersectionMarkers(mainInterval);
+  }
+
+  // Chapter 'slice' — tutorial single slice with labels
+  if (within(CH.slice)) drawTutorialSlice(p, outerFn, innerFn, mainInterval, progress(CH.slice));
+
+  // Chapter 'sweep' — animate slice sweeping across mainInterval, fill behind
+  let sweptTheta = null;
+  if (within(CH.sweep)) {
+    const pp = easeInOut(progress(CH.sweep));
+    sweptTheta = mainInterval[0] + pp * (mainInterval[1] - mainInterval[0]);
+    drawAccumulatedRegion(outerFn, innerFn, mainInterval[0], sweptTheta, p.mode);
+    drawSweepingSlice(outerFn, innerFn, sweptTheta, p.mode);
+  } else if (past(CH.sweep)) {
+    drawAccumulatedRegion(outerFn, innerFn, mainInterval[0], mainInterval[1], p.mode);
+  }
+
+  // Chapter 'answer' — flourish ripple
+  if (within(CH.answer)) drawAnswerFlourish(progress(CH.answer), mainInterval);
+
+  // UI updates
+  updatePanels();
+  updateCaption(p);
+  updateAreaCounter(p, sweptTheta);
+}
+
+// =============================================================================
+// COORDINATE TRANSFORMS
+// =============================================================================
+function fitScale() {
+  const padX = 32, padY = 24;
+  const sx = (W - 2 * padX) / Math.max(0.01, VIEW.xMax - VIEW.xMin);
+  const sy = (H - 2 * padY) / Math.max(0.01, VIEW.yMax - VIEW.yMin);
+  return Math.min(sx, sy);
+}
+function mx(x) {
+  const s = fitScale();
+  const xc = (VIEW.xMax + VIEW.xMin) / 2;
+  return W / 2 + (x - xc) * s;
+}
+function my(y) {
+  const s = fitScale();
+  const yc = (VIEW.yMax + VIEW.yMin) / 2;
+  return H / 2 - (y - yc) * s;
+}
+function mscale() { return fitScale(); }
+
+// =============================================================================
+// DRAWING PRIMITIVES
+// =============================================================================
+function drawGridAndAxes() {
+  strokeWeight(1); stroke(C.grid);
+  // pick a nice grid step
+  const spanX = VIEW.xMax - VIEW.xMin;
+  let step = 0.5;
+  if (spanX > 6) step = 1; else if (spanX < 1.5) step = 0.25;
+  for (let x = Math.ceil(VIEW.xMin / step) * step; x <= VIEW.xMax; x += step) {
+    line(mx(x), my(VIEW.yMin), mx(x), my(VIEW.yMax));
+  }
+  for (let y = Math.ceil(VIEW.yMin / step) * step; y <= VIEW.yMax; y += step) {
+    line(mx(VIEW.xMin), my(y), mx(VIEW.xMax), my(y));
+  }
+  // axes
+  stroke(C.axis); strokeWeight(1.5);
+  if (VIEW.yMin <= 0 && VIEW.yMax >= 0) line(mx(VIEW.xMin), my(0), mx(VIEW.xMax), my(0));
+  if (VIEW.xMin <= 0 && VIEW.xMax >= 0) line(mx(0), my(VIEW.yMin), mx(0), my(VIEW.yMax));
+  // labels
+  noStroke(); fill(C.soft); textSize(10.5); textAlign(CENTER, TOP);
+  for (let x = Math.ceil(VIEW.xMin / step) * step; x <= VIEW.xMax; x += step) {
+    if (Math.abs(x) > 1e-9 && Math.abs(x - Math.round(x / step) * step) < 1e-9) {
+      const lbl = (Math.abs(x % 1) < 1e-9) ? x.toFixed(0) : x.toFixed(1);
+      text(lbl, mx(x), my(0) + 4);
+    }
+  }
+  textAlign(RIGHT, CENTER);
+  for (let y = Math.ceil(VIEW.yMin / step) * step; y <= VIEW.yMax; y += step) {
+    if (Math.abs(y) > 1e-9 && Math.abs(y - Math.round(y / step) * step) < 1e-9) {
+      const lbl = (Math.abs(y % 1) < 1e-9) ? y.toFixed(0) : y.toFixed(1);
+      text(lbl, mx(0) - 5, my(y));
+    }
+  }
+  fill(C.ink); textSize(13);
+  textAlign(LEFT, CENTER); text('x', mx(VIEW.xMax) - 14, my(0) + 12);
+  textAlign(CENTER, BOTTOM); text('y', mx(0) + 10, my(VIEW.yMax) + 16);
+}
+
+function drawAuxCurves(p) {
+  if (!p.auxCurves) return;
+  for (const aux of p.auxCurves) {
+    const [a, b] = aux.range || p.range;
+    noFill(); stroke(aux.color); strokeWeight(1.2);
+    drawingContext.setLineDash([5, 4]);
+    beginShape();
+    for (let th = a; th <= b; th += 0.01) {
+      const r = aux.fn(th);
+      vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+    }
+    endShape();
+    drawingContext.setLineDash([]);
+  }
+}
+
+function drawTracedCurve(fn, t0, t1, strokeCol, fillCol, w) {
+  if (t1 <= t0) return;
+  // subtle fill (anchored at origin)
+  noStroke(); fill(fillCol);
+  beginShape();
+  vertex(mx(0), my(0));
+  for (let th = t0; th <= t1; th += 0.01) {
+    const r = fn(th);
+    vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+  }
+  endShape(CLOSE);
+  // stroke
+  noFill(); stroke(strokeCol); strokeWeight(w);
+  beginShape();
+  for (let th = t0; th <= t1; th += 0.005) {
+    const r = fn(th);
+    vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+  }
+  endShape();
+}
+
+function drawCurveLabels(p) {
+  const [a, b] = p.range;
+  // outer label at θ near b (or middle for single-curve)
+  const thOuter = p.mode === 'single' ? (a + b) / 2 : a + 0.65 * (b - a);
+  const rOuter = p.outer.fn(thOuter);
+  noStroke(); fill(C.gold); textSize(12); textAlign(LEFT, CENTER);
+  text(p.outer.label, mx(rOuter * Math.cos(thOuter)) + 10, my(rOuter * Math.sin(thOuter)) - 14);
+  if (p.mode !== 'single') {
+    const thInner = a + 0.35 * (b - a);
+    const rInner = p.inner.fn(thInner);
+    fill(C.blue); textSize(12); textAlign(RIGHT, CENTER);
+    text(p.inner.label, mx(rInner * Math.cos(thInner)) - 10, my(rInner * Math.sin(thInner)) + 14);
+  }
+  if (p.auxCurves) {
+    for (let i = 0; i < p.auxCurves.length; i++) {
+      const aux = p.auxCurves[i];
+      const [aa, bb] = aux.range || p.range;
+      const th = (aa + bb) / 2;
+      const r = aux.fn(th);
+      fill('rgba(106, 169, 255, 0.7)'); textSize(10.5);
+      textAlign(LEFT, BOTTOM);
+      text(aux.label, mx(r * Math.cos(th)) + 6, my(r * Math.sin(th)));
+    }
+  }
+}
+
+function drawIntersectionMarkers(mainInterval) {
+  for (const theta of mainInterval) {
+    const r = PRESETS[activePresetKey].outer.fn(theta);
+    const x = r * Math.cos(theta), y = r * Math.sin(theta);
+    const pulse = 1 + 0.25 * Math.sin(millis() * 0.005);
+    noStroke();
+    fill('rgba(255, 209, 102, 0.20)');
+    circle(mx(x), my(y), 22 * pulse);
+    fill(C.gold);
+    circle(mx(x), my(y), 8);
+    // label
+    fill(C.ink); textSize(11);
+    textAlign(theta < PI / 2 || theta > PI ? LEFT : RIGHT, BOTTOM);
+    const ox = (theta < PI / 2 || theta > PI) ? 12 : -12;
+    text(`θ = ${fmtAngleText(theta)}`, mx(x) + ox, my(y) - 10);
+    // ray from origin
+    stroke('rgba(255, 209, 102, 0.45)'); strokeWeight(1);
+    drawingContext.setLineDash([4, 4]);
+    line(mx(0), my(0), mx(Math.cos(theta) * (Math.max(Math.abs(VIEW.xMin), Math.abs(VIEW.xMax)) * 1.05)),
+                       my(Math.sin(theta) * (Math.max(Math.abs(VIEW.yMin), Math.abs(VIEW.yMax)) * 1.05)));
+    drawingContext.setLineDash([]);
+  }
+}
+function fmtAngleText(rad) {
+  const candidates = [
+    [0, '0'], [PI / 6, 'π/6'], [PI / 4, 'π/4'], [PI / 3, 'π/3'],
+    [PI / 2, 'π/2'], [2 * PI / 3, '2π/3'], [3 * PI / 4, '3π/4'], [5 * PI / 6, '5π/6'],
+    [PI, 'π'], [-PI / 2, '-π/2'], [-PI / 6, '-π/6'],
+  ];
+  for (const [v, s] of candidates) if (Math.abs(rad - v) < 1e-3) return s;
+  return rad.toFixed(2);
+}
+
+function drawTutorialSlice(p, outerFn, innerFn, [iA, iB], progFrac) {
+  // Show a series of single radial lines — each one IS a dA — appearing in
+  // sequence across the main interval. The line runs from r_inner(θ) to
+  // r_outer(θ) (or origin to r_outer in single-curve mode). A faint thin
+  // line continues from origin to inner so students can see what's being
+  // "subtracted" off when the inner curve is present.
+  const N = 9;                                      // number of dA lines
+  const range = iB - iA;
+  const stride = 1 / N;                             // window each line claims
+  const fadeIn = 0.08;                              // proportion used for fade
+  let middleTheta = (iA + iB) / 2, middleR = null;
+
+  for (let i = 0; i < N; i++) {
+    const showAt = (i + 0.5) * stride;
+    const op = Math.max(0, Math.min(1, (progFrac - showAt + fadeIn) / fadeIn));
+    if (op <= 0) continue;
+    const theta = iA + (i + 0.5) * stride * range;
+    const rOut = Math.max(0, outerFn(theta));
+    const rIn  = p.mode === 'single' ? 0 : Math.max(0, innerFn(theta));
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+
+    // faint origin → inner segment (only when there's a real inner curve)
+    if (p.mode !== 'single' && rIn > 0.01) {
+      stroke(`rgba(122, 135, 148, ${op * 0.55})`); strokeWeight(1);
+      line(mx(0), my(0), mx(rIn * cosT), my(rIn * sinT));
+    }
+    // bright inner → outer segment — this IS one dA
+    stroke(`rgba(255, 209, 102, ${op})`); strokeWeight(2.2);
+    line(mx(rIn * cosT), my(rIn * sinT), mx(rOut * cosT), my(rOut * sinT));
+    // small tip at outer endpoint
+    noStroke(); fill(`rgba(255, 209, 102, ${op})`);
+    circle(mx(rOut * cosT), my(rOut * sinT), 4.5);
+
+    // remember the middle line so we can put the dA label there
+    if (i === Math.floor(N / 2)) {
+      middleTheta = theta;
+      middleR = (rIn + rOut) / 2;
+    }
+  }
+
+  // "dA" label on the middle line once it's visible
+  if (middleR !== null && progFrac > 0.45) {
+    const labelOp = Math.min(1, (progFrac - 0.45) / 0.10);
+    noStroke(); fill(`rgba(255, 209, 102, ${labelOp})`); textSize(13);
+    textAlign(LEFT, CENTER);
+    text('dA', mx(middleR * Math.cos(middleTheta)) + 10,
+              my(middleR * Math.sin(middleTheta)) - 10);
+  }
+}
+
+function drawAccumulatedRegion(outerFn, innerFn, t0, t1, mode) {
+  if (t1 <= t0) return;
+  drawRingSlice(t0, t1, (th) => mode === 'single' ? 0 : innerFn(th), outerFn, C.shade, C.shadeEdge);
+}
+
+function drawSweepingSlice(outerFn, innerFn, theta, mode) {
+  const dTheta = 0.025;
+  const [iA, iB] = computed.mainInterval;
+  const a = Math.max(iA, theta - dTheta / 2);
+  const b = Math.min(iB, theta + dTheta / 2);
+  drawRingSlice(a, b, (th) => mode === 'single' ? 0 : innerFn(th), outerFn,
+                'rgba(255, 209, 102, 0.55)', C.gold);
+  // ray + theta label
+  stroke(C.gold); strokeWeight(1.5);
+  drawingContext.setLineDash([3, 4]);
+  const reach = outerFn(theta) * 1.06;
+  line(mx(0), my(0), mx(reach * Math.cos(theta)), my(reach * Math.sin(theta)));
+  drawingContext.setLineDash([]);
+  noStroke(); fill(C.gold); textSize(12);
+  const lx = (outerFn(theta) + 0.12) * Math.cos(theta);
+  const ly = (outerFn(theta) + 0.12) * Math.sin(theta);
+  textAlign(theta < PI / 2 || theta > PI ? LEFT : RIGHT, CENTER);
+  text(`θ = ${theta.toFixed(2)}`, mx(lx) + (theta < PI / 2 || theta > PI ? 8 : -8), my(ly));
+}
+
+// Filled pie-ring slice. innerFnOfTheta and outerFnOfTheta can vary with θ.
+// We clamp r to ≥ 0 before plotting: a negative r in polar coordinates means
+// "the curve is pointing the opposite way at this θ", so it isn't bounding
+// the region we're shading at this angle. Treating r as 0 keeps the inner
+// boundary at the origin where it belongs.
+function drawRingSlice(t0, t1, innerFnOfTheta, outerFnOfTheta, fillCol, edgeCol) {
+  if (t1 <= t0) return;
+  const step = Math.max(0.005, (t1 - t0) / 200);
+  const outR = (th) => Math.max(0, outerFnOfTheta(th));
+  const inR = (th) => Math.max(0, innerFnOfTheta(th));
+  noStroke(); fill(fillCol);
+  beginShape();
+  for (let th = t0; th <= t1 + 1e-9; th += step) {
+    const r = outR(th);
+    vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+  }
+  for (let th = t1; th >= t0 - 1e-9; th -= step) {
+    const r = inR(th);
+    vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+  }
+  endShape(CLOSE);
+  if (edgeCol) {
+    noFill(); stroke(edgeCol); strokeWeight(1.3);
+    beginShape();
+    for (let th = t0; th <= t1 + 1e-9; th += step) {
+      const r = outR(th);
+      vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+    }
+    endShape();
+    beginShape();
+    for (let th = t0; th <= t1 + 1e-9; th += step) {
+      const r = inR(th);
+      vertex(mx(r * Math.cos(th)), my(r * Math.sin(th)));
+    }
+    endShape();
+  }
+}
+
+function drawAnswerFlourish(prog, [iA, iB]) {
+  noFill();
+  for (let i = 0; i < 3; i++) {
+    const tt = (prog + i * 0.33) % 1;
+    stroke(`rgba(255, 209, 102, ${(1 - tt) * 0.35})`);
+    strokeWeight(1);
+    const rad = (tt * Math.max(VIEW.xMax - VIEW.xMin, VIEW.yMax - VIEW.yMin) * 0.6) * mscale();
+    drawingContext.beginPath();
+    drawingContext.arc(mx(0), my(0), rad, -iB, -iA);
+    drawingContext.stroke();
+  }
+}
+
+// =============================================================================
+// PANEL + CAPTION UPDATES
+// =============================================================================
+function updatePanels() {
+  const blocks = document.querySelectorAll('.math-block');
+  const stepOf = { intersect: CH.intersect, slice: CH.slice, sweep: CH.sweep, answer: CH.answer };
+  for (const b of blocks) {
+    const ch = stepOf[b.dataset.step];
+    const isActive = within(ch);
+    const isDone = past(ch);
+    b.classList.toggle('active', isActive);
+    b.classList.toggle('done', isDone && !isActive);
+  }
+  document.getElementById('liveArea').classList.toggle('active', within(CH.sweep) || within(CH.answer));
+}
+
+function updateAreaCounter(p, currTheta) {
+  let v;
+  if (t < CH.sweep.a) v = 0;
+  else if (currTheta !== null) {
+    const [iA] = computed.mainInterval;
+    const innerFn = p.mode === 'single' ? ((t) => 0) : computed.innerFn;
+    // Match the area math used for the final total: clamp r ≥ 0 so the live
+    // counter agrees with what's shaded.
+    const oC = clampR(computed.outerFn), iC = clampR(innerFn);
+    v = 0.5 * simpson((th) => oC(th) ** 2 - iC(th) ** 2, iA, currTheta);
+  } else v = computed.totalArea;
+  document.getElementById('areaVal').textContent = v.toFixed(3);
+}
+
+const CAPTIONS_BETWEEN = [
+  { until: CH.intro.b,     html: 'Find the <b>area inside the outer curve but outside the inner curve.</b>' },
+  { until: CH.draw.b,      html: 'Draw both curves over the given range of θ.' },
+  { until: CH.intersect.b, html: 'They cross where <b>outer(θ) = inner(θ)</b> — those θ values bound the region.' },
+  { until: CH.slice.b,     html: 'Each thin slice has area <b>dA = ½ (outer² − inner²) dθ</b>.' },
+  { until: CH.sweep.b,     html: 'Sweep θ through the interval; the pink region is every slice added up.' },
+  { until: 1.0,            html: 'The full integral gives the total area.' }
+];
+const CAPTIONS_SINGLE = [
+  { until: CH.intro.b,     html: 'Find the <b>area enclosed by the single polar curve.</b>' },
+  { until: CH.draw.b,      html: 'Draw the curve over the given range of θ.' },
+  { until: CH.intersect.b, html: 'Endpoints of the interval are the start and end of the sweep.' },
+  { until: CH.slice.b,     html: 'Each thin slice from the origin has area <b>dA = ½ r² dθ</b>.' },
+  { until: CH.sweep.b,     html: 'Sweep θ through the interval; every slice adds up.' },
+  { until: 1.0,            html: 'The full integral gives the enclosed area.' }
+];
+function updateCaption(p) {
+  const list = p.mode === 'single' ? CAPTIONS_SINGLE : CAPTIONS_BETWEEN;
+  const el = document.getElementById('caption');
+  const cur = list.find(c => t <= c.until);
+  if (cur && el.dataset.last !== cur.html) {
+    el.dataset.last = cur.html;
+    el.innerHTML = cur.html;
+  }
+}
+</script>
+</body>
+</html>

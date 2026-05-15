@@ -713,6 +713,12 @@ function compileExpression(raw) {
   let s = raw.trim().toLowerCase();
   s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
   s = s.replace(/×/g, '*').replace(/÷/g, '/');
+  // Implicit multiplication so kids can write 2x, 3sin(x), 2(x+1), (x+1)(x-1)
+  // the way they would on paper. The lookahead on the first rule preserves
+  // scientific notation like 1e-3. (pi/e resolve via the mathScope below.)
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  // Disallow bare `=` or `;` to avoid surprise multi-statement bodies
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
   const mathScope = {
     pi: Math.PI, e: Math.E,
@@ -939,6 +945,13 @@ function frameCamera() {
   const midZ = (zMin + zMax) / 2;
   controls.target.set(0, 0, midZ);
   camera.position.set(dist * 0.7, dist * 0.7, midZ + dist * 0.55);
+  camera.near = dist * 0.01;
+  camera.far = dist * 10;
+  camera.updateProjectionMatrix();
+  if (scene.fog) {
+    scene.fog.near = dist * 0.6;
+    scene.fog.far = dist * 2.0;
+  }
   camera.lookAt(controls.target);
   controls.update();
 }
@@ -1067,10 +1080,10 @@ document.querySelectorAll('.presets button').forEach(b => {
     document.querySelectorAll('.presets button').forEach(x =>
       x.classList.toggle('active', x === b));
     activePresetKey = b.dataset.preset;
-    shellCount = 0;
-    sweepAngle = 0;
-    shellSlider.value = 0;
-    angleSlider.value = 0;
+    shellCount = 12;
+    sweepAngle = Math.PI * 2;
+    shellSlider.value = 12;
+    angleSlider.value = 360;
     customForm.classList.toggle('shown', activePresetKey === 'custom');
     if (activePresetKey === 'custom') {
       applyCustom();
