@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>Shell Method · 3D Explorer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
   :root {
     --bg: #0e1116;
@@ -153,6 +156,80 @@
     .overlay { max-width: 250px; padding: 10px 14px; }
     .overlay h2 { font-size: 17px; }
   }
+
+  /* ─── MathQuill dark-theme overrides ─── */
+  /* line-height: 1.0 keeps stretchy \left(\right) parens from scaling
+     to 1.8x for trivial content like sin(x). Fractions inside parens
+     still grow naturally because MQ scales to actual content height. */
+  #customForm .mq-editable-field {
+    background: var(--pill); color: var(--ink);
+    border: 1.5px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; min-width: 220px; min-height: 30px;
+    font-size: 14px; line-height: 1.0; cursor: text; vertical-align: middle;
+  }
+  #customForm .mq-editable-field.mq-focused {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px rgba(255,209,102,0.15);
+    outline: none;
+  }
+  #customForm .mq-cursor { border-color: var(--gold); }
+  #customForm .mq-selection { background: rgba(255,209,102,0.25); }
+  .kbd-toggle {
+    background: #1c2028; color: var(--gold);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 5px 10px; font-size: 15px; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s; line-height: 1;
+  }
+  .kbd-toggle:hover { border-color: var(--gold); background: #222832; }
+  .kbd-toggle.open { border-color: var(--gold); background: rgba(255,209,102,0.1); }
+
+  /* ─── Math Keyboard Popup ─── */
+  .kbd-popup {
+    position: fixed; z-index: 1000;
+    background: #12161c; border: 1px solid #1e2430; border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
+    display: none;
+  }
+  .kbd-popup.open { display: block; }
+  .kbd-layout { display: flex; gap: 10px; align-items: flex-start; }
+  .kbd-card {
+    background: #0e1116; border: 1px solid #1e2430; border-radius: 10px;
+    padding: 10px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .kbd-slabel {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: #3d4857; font-weight: 600; padding-left: 2px; margin-bottom: 2px;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+  }
+  .kbd-row { display: flex; gap: 4px; }
+  .kbd-divider { height: 1px; background: #1e2430; margin: 3px 0; border: none; }
+  .k {
+    min-width: 40px; min-height: 40px; padding: 0 6px; border-radius: 7px;
+    border: 1px solid transparent; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Times New Roman", Georgia, serif;
+    transition: background 0.12s, border-color 0.12s, transform 0.08s;
+    user-select: none;
+  }
+  .k:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
+  .k:active { transform: scale(0.94); box-shadow: none; }
+  .k-op { background: #1e1e10; color: #ffd166; border-color: #2a2810; font-family: sans-serif; }
+  .k-op:hover { background: #26260f; border-color: #ffd166; }
+  .k-struct { background: #141828; color: #c8d8ff; border-color: #1e2440; font-size: 12px; min-width: 50px; }
+  .k-struct:hover { background: #182030; border-color: #4060b0; }
+  .k-var { background: #201c08; color: #ffd166; border-color: #302a10; font-style: italic; font-size: 16px; }
+  .k-var:hover { background: #28230a; border-color: #ffd166; }
+  .k-const { background: #16121e; color: #c8a4ff; border-color: #241a34; font-style: italic; font-size: 15px; }
+  .k-const:hover { background: #1c1828; border-color: #8060c0; }
+  .k-del { background: #201416; color: #ff8a8a; border-color: #301a1c; font-size: 16px; font-family: sans-serif; }
+  .k-del:hover { background: #28181a; border-color: #ff6060; }
+  .k-fn { background: #101820; color: #8ab8e8; border-color: #182030;
+          font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 500; min-width: 44px; }
+  .k-fn:hover { background: #142030; border-color: #4080b0; color: #b0d4f8; }
+  .k-frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; font-size: 10px; gap: 1px; }
+  .k-frac span:first-child { border-bottom: 1px solid currentColor; padding: 0 4px; }
+  .k-frac span:last-child { padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -172,14 +249,15 @@
 
   <div id="customForm">
     <label>y = </label>
-    <input id="customExpr" type="text" value="sin(x)" placeholder="e.g. sin(x) + 1">
+    <span id="customExprMQ" class="mq-editable-field"></span>
+    <button id="kbdToggle" class="kbd-toggle" title="Open math keyboard">⌨</button>
     <label>from x =</label>
     <input id="customA" type="number" value="0" step="0.1">
     <label>to</label>
     <input id="customB" type="number" value="6.28" step="0.1">
     <button id="customApply">apply</button>
     <span id="customError"></span>
-    <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e</span>
+    <span id="customHelp">type or use ⌨ keyboard · <b>x</b> is the variable · use <b>*</b> for multiplication · <b>^</b> for power</span>
   </div>
 
   <div id="scene-wrap">
@@ -227,6 +305,283 @@
   </footer>
 </div>
 
+<!-- Math Keyboard Popup -->
+<div id="mathKeyboard" class="kbd-popup">
+  <div class="kbd-layout">
+    <div class="kbd-card">
+      <div class="kbd-slabel">Symbols</div>
+      <div class="kbd-row">
+        <button class="k k-struct" data-action="frac" title="Fraction"><span class="k-frac"><span>□</span><span>□</span></span></button>
+        <button class="k k-struct" data-action="pow" title="Power">□<sup style="font-size:8px">□</sup></button>
+        <button class="k k-struct" data-action="sqrt" title="Square root">√□</button>
+        <button class="k k-struct" data-action="abs" title="Absolute value">|□|</button>
+        <button class="k k-var" data-action="typedText" data-arg="x">x</button>
+        <button class="k k-const" data-action="typedText" data-arg="π">π</button>
+        <button class="k k-const" data-action="typedText" data-arg="e">e</button>
+        <button class="k k-del" data-action="keystroke" data-arg="Backspace">⌫</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-op" data-action="typedText" data-arg="+">+</button>
+        <button class="k k-op" data-action="typedText" data-arg="-">−</button>
+        <button class="k k-op" data-action="typedText" data-arg="*">×</button>
+        <button class="k k-op" data-action="typedText" data-arg="/">÷</button>
+        <button class="k k-op" data-action="typedText" data-arg="(">(</button>
+        <button class="k k-op" data-action="typedText" data-arg=")">)</button>
+      </div>
+    </div>
+    <div class="kbd-card">
+      <div class="kbd-slabel">Trig &amp; Logarithms</div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="sin(">sin</button>
+        <button class="k k-fn" data-action="typedText" data-arg="cos(">cos</button>
+        <button class="k k-fn" data-action="typedText" data-arg="tan(">tan</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="csc(">csc</button>
+        <button class="k k-fn" data-action="typedText" data-arg="sec(">sec</button>
+        <button class="k k-fn" data-action="typedText" data-arg="cot(">cot</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="arcsin(" style="min-width:55px">arcsin</button>
+        <button class="k k-fn" data-action="typedText" data-arg="arccos(" style="min-width:55px">arccos</button>
+        <button class="k k-fn" data-action="typedText" data-arg="arctan(" style="min-width:55px">arctan</button>
+      </div>
+      <hr class="kbd-divider">
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="ln(" style="flex:1;min-width:68px">ln</button>
+        <button class="k k-fn" data-action="typedText" data-arg="log(" style="flex:1;min-width:68px">log</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery + MathQuill (regular scripts, before the module) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  var MQ = MathQuill.getInterface(2);
+
+  // Expose MQ field handles so the ES-module script can read values
+  window.mqState = {};
+
+  var mqExpr = MQ.MathField(document.getElementById('customExprMQ'), {
+    spaceBehavesLikeTab: false,
+    handlers: { enter: function () { document.getElementById('customApply').click(); } }
+  });
+  mqExpr.latex('\\sin\\left(x\\right)'); // default = sin(x)
+  window.mqState.expr = mqExpr;
+
+  var popup   = document.getElementById('mathKeyboard');
+  var toggle  = document.getElementById('kbdToggle');
+  var activeMQ = mqExpr;
+
+  function positionPopup() {
+    var rect = toggle.getBoundingClientRect();
+    var pw = popup.offsetWidth || 370;
+    popup.style.top  = (rect.bottom + 6) + 'px';
+    popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pw - 12)) + 'px';
+  }
+
+  function openPopup()  {
+    popup.classList.add('open'); toggle.classList.add('open');
+    positionPopup(); activeMQ = mqExpr; activeMQ.focus();
+  }
+  function closePopup() { popup.classList.remove('open'); toggle.classList.remove('open'); }
+
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    popup.classList.contains('open') ? closePopup() : openPopup();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!popup.contains(e.target) && e.target !== toggle) closePopup();
+  });
+
+  // Prevent popup clicks from blurring the MQ field
+  popup.addEventListener('mousedown', function (e) { e.preventDefault(); });
+
+  // Dispatch button actions to the active MQ field
+  popup.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn || !activeMQ) return;
+    switch (btn.dataset.action) {
+      case 'typedText': activeMQ.typedText(btn.dataset.arg); break;
+      case 'cmd':       activeMQ.cmd(btn.dataset.arg);       break;
+      case 'keystroke': activeMQ.keystroke(btn.dataset.arg); break;
+      case 'frac':  activeMQ.cmd('\\frac');  break;
+      case 'pow':   activeMQ.cmd('^');        break;
+      case 'sqrt':  activeMQ.cmd('\\sqrt');  break;
+      case 'abs':
+        activeMQ.write('\\left|\\right|');
+        activeMQ.keystroke('Left');
+        break;
+    }
+    activeMQ.focus();
+  });
+
+  document.getElementById('customExprMQ').addEventListener('click', function () {
+    activeMQ = mqExpr;
+  });
+
+  // ── LaTeX → JS expression converter ──────────────────────────────────────
+  // Known function names — a letter run that matches one of these does NOT
+  // get an implicit '*' inserted before its trailing '('. Anything else is
+  // treated as a variable run (so `2x` → `2*x`, `xsin(y)` → `x*sin(y)`).
+  // Constants like `pi`, `e` are NOT in this list — `\pi(x+1)` should
+  // become `pi*(x+1)`, not the function call `pi(x+1)`.
+  var FN_NAMES = /^(sin|cos|tan|csc|sec|cot|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|log10|exp|sqrt|cbrt|abs|pow|min|max|floor|ceil|round|sign|hypot)$/;
+
+  // Insert explicit '*' for implicit multiplication that high-school students
+  // routinely write but JS rejects: `2x`, `2(x+1)`, `(x+1)(x-1)`, `x(2)`, etc.
+  // Walk the string token-by-token so we don't insert '*' inside numbers,
+  // inside identifiers, or before a function call's '('.
+  function insertImplicitMul(s) {
+    var out = '', i = 0, n = s.length;
+    function readNum() {
+      var j = i;
+      while (j < n && /[0-9.]/.test(s[j])) j++;
+      var t = s.slice(i, j); i = j; return t;
+    }
+    function readIdent() {
+      var j = i;
+      while (j < n && /[a-zA-Z_]/.test(s[j])) j++;
+      var t = s.slice(i, j); i = j; return t;
+    }
+    var prev = '';   // last token kind: '' | 'num' | 'var' | 'fn' | 'rparen'
+    while (i < n) {
+      var c = s[i];
+      if (/[0-9.]/.test(c)) {
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += readNum(); prev = 'num';
+      } else if (/[a-zA-Z_]/.test(c)) {
+        var id = readIdent();
+        // Function call if next non-space char is '('. `e` and `pi` count
+        // as variables/constants, never functions.
+        var k = i; while (k < n && s[k] === ' ') k++;
+        var isFn = FN_NAMES.test(id) && s[k] === '(';
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += id;
+        prev = isFn ? 'fn' : 'var';
+      } else if (c === ' ') {
+        // Spaces from convert() act as identifier separators; copy them so
+        // JS still parses (`x sin(x)` is valid JS for x*sin(x)... no wait,
+        // it isn't — JS would parse as x sin which is two statements).
+        // We DON'T want to keep these spaces in the final JS — drop them
+        // and let prev-state drive the implicit '*'.
+        i++;
+      } else if (c === '(') {
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += c; i++; prev = '';
+      } else if (c === ')') {
+        out += c; i++; prev = 'rparen';
+      } else if (c === '*' && s[i+1] === '*') {
+        // power operator: copy '**' then continue (next token can be num/(/var)
+        out += '**'; i += 2; prev = '';
+      } else {
+        out += c; i++;
+        // Any other operator/punct resets the "could-multiply" state.
+        if (/[+\-/^,]/.test(c)) prev = '';
+      }
+    }
+    return out;
+  }
+
+  window.latexToJS = function (latex) {
+    // Don't pre-strip whitespace: MathQuill emits `\pi x` (space-terminated
+    // cmd) and `\sin x`, and the cmd-reader needs that boundary. convert()
+    // skips spaces internally.
+    return insertImplicitMul(convert(latex));
+
+    function findClose(s, pos) {
+      var d = 0;
+      for (var i = pos; i < s.length; i++) {
+        if (s[i] === '{') d++;
+        else if (s[i] === '}' && --d === 0) return i;
+      }
+      return s.length - 1;
+    }
+
+    function convert(s) {
+      var out = '', i = 0;
+      // Emit text from a translated LaTeX cmd. Pads with spaces on either
+      // side when needed so adjacent typed letters/digits don't merge with
+      // it — e.g. `x\sin(y)` would otherwise become `xsin(y)` (one variable),
+      // and `2\pi x` would become `2pix`.
+      function emit(text) {
+        if (out && /[a-zA-Z0-9_]$/.test(out) && /^[a-zA-Z_]/.test(text)) out += ' ';
+        out += text;
+        if (/[a-zA-Z_]$/.test(text)) out += ' ';
+      }
+      while (i < s.length) {
+        var c = s[i];
+        if (c === '\\') {
+          var j = i + 1;
+          while (j < s.length && /[a-zA-Z]/.test(s[j])) j++;
+          var cmd = s.slice(i + 1, j);
+          i = j;
+          if (cmd === 'frac') {
+            var nc = findClose(s, i), num = s.slice(i + 1, nc); i = nc + 1;
+            var dc = findClose(s, i), den = s.slice(i + 1, dc); i = dc + 1;
+            out += '((' + convert(num) + ')/(' + convert(den) + '))';
+          } else if (cmd === 'sqrt') {
+            if (s[i] === '[') { i = s.indexOf(']', i) + 1; }
+            var sc = findClose(s, i), sa = s.slice(i + 1, sc); i = sc + 1;
+            emit('sqrt(' + convert(sa) + ')');
+          } else if (cmd === 'left') {
+            var dl = s[i++];
+            if (dl === '|') {
+              var ri = s.indexOf('\\right|', i);
+              if (ri !== -1) { emit('abs(' + convert(s.slice(i, ri)) + ')'); i = ri + 7; }
+              else { out += '|'; }
+            } else if (dl === '.') {
+              // \left. is an invisible delimiter — emit nothing
+            } else {
+              out += (dl === '(' || dl === '[') ? '(' : dl;
+            }
+          } else if (cmd === 'right') {
+            var dr = s[i++];
+            if (dr === '|' || dr === '.') {
+              // \right| handled above; \right. is invisible — emit nothing
+            } else out += ')';
+          } else {
+            var MAP = {
+              pi:'pi', cdot:'*', times:'*', div:'/',
+              sin:'sin', cos:'cos', tan:'tan',
+              csc:'csc', sec:'sec', cot:'cot',
+              arcsin:'arcsin', arccos:'arccos', arctan:'arctan',
+              ln:'ln', log:'log10', exp:'exp',
+            };
+            emit((MAP[cmd] !== undefined) ? MAP[cmd] : cmd);
+          }
+        } else if (c === '^') {
+          i++;
+          if (s[i] === '{') {
+            var ec = findClose(s, i), ep = s.slice(i + 1, ec); i = ec + 1;
+            out += '**(' + convert(ep) + ')';
+          } else { out += '**(' + s[i++] + ')'; }
+        } else if (c === '{') {
+          var gc = findClose(s, i), gp = s.slice(i + 1, gc); i = gc + 1;
+          out += '(' + convert(gp) + ')';
+        } else if (c === '}') {
+          i++;
+        } else if (c === '_') {
+          i++;
+          if (s[i] === '{') { i = findClose(s, i) + 1; } else i++;
+        } else if (/\s/.test(c)) {
+          // skip whitespace — it served as a cmd terminator already
+          i++;
+        } else {
+          out += c; i++;
+        }
+      }
+      return out;
+    }
+  };
+}());
+</script>
+
 <script type="importmap">
 {
   "imports": {
@@ -253,28 +608,48 @@ const PRESETS = {
   sqrt: {
     label: 'y = √x',
     formula: 'V = ∫₀⁴ 2π · x · √x  dx',
+    titleLatex: 'y = \\sqrt{x}',
+    formulaLatex: 'V = \\int_0^4 2\\pi\\, x \\sqrt{x}\\, dx',
     f: x => Math.sqrt(x),
     a: 0.001, b: 4.0,
   },
   parabola: {
     label: 'y = x² / 2',
     formula: 'V = ∫₀² 2π · x · (x²/2) dx',
+    titleLatex: 'y = \\dfrac{x^2}{2}',
+    formulaLatex: 'V = \\int_0^2 2\\pi\\, x \\cdot \\dfrac{x^2}{2}\\, dx',
     f: x => 0.5 * x * x,
     a: 0.001, b: 2.0,
   },
   sine: {
     label: 'y = sin(x) + 0.2',
     formula: 'V = ∫₀^π 2π · x · (sin x + 0.2) dx',
+    titleLatex: 'y = \\sin(x) + 0.2',
+    formulaLatex: 'V = \\int_0^{\\pi} 2\\pi\\, x \\cdot \\bigl(\\sin x + 0.2\\bigr)\\, dx',
     f: x => Math.sin(x) + 0.2,
     a: 0.001, b: Math.PI,
   },
   custom: {
     label: 'custom',
     formula: 'V = ∫ 2π · x · f(x) dx',
+    titleLatex: 'y = \\sin(x)',
+    formulaLatex: 'V = \\int 2\\pi\\, x \\cdot f(x)\\, dx',
     f: x => Math.sin(x),       // default shows the +/- shell behavior
     a: 0.001, b: 6.283,
   },
 };
+
+// KaTeX render with plain-text fallback if the CDN didn't load.
+function renderMath(el, latex, displayMode = false) {
+  if (!el) return;
+  if (typeof katex !== 'undefined') {
+    try {
+      katex.render(latex, el, { displayMode, throwOnError: false, output: 'html' });
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  el.textContent = latex;
+}
 let N_SHELLS = 24;  // adjustable via density slider
 
 const canvas = document.getElementById('scene');
@@ -330,41 +705,50 @@ function disposeGroup(group) {
   group.clear();
 }
 
-// Compile a kid-friendly math expression like "x^2 / 2 + sin(x)" into a real
-// JavaScript function. We do two tiny rewrites first (^ → ** and π → pi),
-// then build a function whose body runs `with (Math)` so callers can write
-// `sin(x)` instead of `Math.sin(x)`.
+// Compile a math expression string into a JS function f(x).
+// Accepts MathQuill text() output (e.g. x^2+sin(x)) and latexToJS() output.
+// Uses a rich scope so csc, sec, cot, arcsin/cos/tan, ln, log10, pi, e all work.
 function compileExpression(raw) {
   if (!raw || !raw.trim()) throw new Error('expression is empty');
   let s = raw.trim().toLowerCase();
-  s = s.replace(/π/g, 'pi');
-  s = s.replace(/\^/g, '**');
-  // Insert * for implicit multiplication FIRST so 2pi/3sin(x)/(x+1)(x-1) all
-  // get *'s in. The lookahead on the first rule preserves scientific notation
-  // like 1e-3.
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/×/g, '*').replace(/÷/g, '/');
+  // Implicit multiplication so kids can write 2x, 3sin(x), 2(x+1), (x+1)(x-1)
+  // the way they would on paper. The lookahead on the first rule preserves
+  // scientific notation like 1e-3. (pi/e resolve via the mathScope below.)
   s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
   s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
-  // THEN resolve lowercase constants. `with(Math)` exposes PI/E uppercase
-  // only, so bare `pi`/`e` would otherwise fail.
-  s = s.replace(/\bpi\b/g, 'PI');
-  s = s.replace(/\be\b/g, 'E');
   // Disallow bare `=` or `;` to avoid surprise multi-statement bodies
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
-  let fn;
+  const mathScope = {
+    pi: Math.PI, e: Math.E,
+    abs: Math.abs, sqrt: Math.sqrt, cbrt: Math.cbrt,
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan,
+    log: Math.log, ln: Math.log, log10: Math.log10, exp: Math.exp,
+    pow: Math.pow, ceil: Math.ceil, floor: Math.floor, round: Math.round,
+    min: Math.min, max: Math.max, sign: Math.sign, hypot: Math.hypot,
+    csc: x => 1 / Math.sin(x),
+    sec: x => 1 / Math.cos(x),
+    cot: x => Math.cos(x) / Math.sin(x),
+    arcsin: Math.asin, arccos: Math.acos, arctan: Math.atan,
+  };
   try {
-    // eslint-disable-next-line no-new-func
-    fn = new Function('x', `with (Math) { return (${s}); }`);
+    const factory = new Function('__m__', `return function(x){ with(__m__){ return (${s}); }; }`);
+    return factory(mathScope);
   } catch (e) {
     throw new Error('syntax error — check your parentheses and operators');
   }
-  // Probe a handful of points: must return finite numbers
-  for (const t of [0.01, 0.5, 1, 2]) {
-    const v = fn(t);
-    if (typeof v !== 'number' || !isFinite(v)) {
-      throw new Error(`function gives a non-number at x = ${t}`);
-    }
-  }
-  return fn;
+}
+
+// Convert JS expression to a readable display string (cleans up ** and nested parens).
+function jsPretty(s) {
+  if (!s) return s;
+  // x**(n) → x^n  (single token exponent)
+  s = s.replace(/\*\*\((\w+)\)/g, '^$1');
+  // ((a)/(b)) → a/b
+  s = s.replace(/\(\((.+?)\)\/\((.+?)\)\)/g, '$1/$2');
+  return s;
 }
 
 // Sample a 3-stop gradient at parameter t ∈ [0, 1].
@@ -533,8 +917,8 @@ function rebuild() {
 
   controls.target.set(0, 0, (zLo + zHi) / 2);
 
-  document.getElementById('ovTitle').textContent = p.label;
-  document.getElementById('ovFormula').textContent = p.formula;
+  renderMath(document.getElementById('ovTitle'), p.titleLatex || p.label);
+  renderMath(document.getElementById('ovFormula'), p.formulaLatex || p.formula);
   document.getElementById('ovVol').textContent = trapVolume(f, a, b).toFixed(3);
 
   // sync legend gradient swatch to the active preset's ramp
@@ -628,7 +1012,6 @@ angleSlider.addEventListener('input', e => {
 });
 
 const customForm = document.getElementById('customForm');
-const customExpr = document.getElementById('customExpr');
 const customA = document.getElementById('customA');
 const customB = document.getElementById('customB');
 const customApply = document.getElementById('customApply');
@@ -636,26 +1019,52 @@ const customError = document.getElementById('customError');
 
 function applyCustom() {
   customError.textContent = '';
-  const exprStr = customExpr.value;
   const a = parseFloat(customA.value);
   const b = parseFloat(customB.value);
   if (!isFinite(a) || !isFinite(b) || b <= a) {
     customError.textContent = 'need a < b (e.g. a=0, b=3)';
     return;
   }
+  // Read expression from MathQuill field
+  const mqField = window.mqState && window.mqState.expr;
+  const rawLatex = mqField ? mqField.latex() : '';
+  const exprJS = rawLatex ? window.latexToJS(rawLatex) : '';
+  const displayStr = jsPretty(exprJS);
+
+  if (!exprJS) { customError.textContent = 'expression is empty'; return; }
+
   let fn;
   try {
-    fn = compileExpression(exprStr);
+    fn = compileExpression(exprJS);
   } catch (e) {
     customError.textContent = e.message;
     return;
   }
-  // Hook the parsed function into the preset and re-render
+  // Probe within the user-specified domain. Catch runtime errors too —
+  // e.g. `pi(x)` would TypeError because pi is a number, not a function.
+  for (let k = 0; k <= 8; k++) {
+    const t = a + (b - a) * k / 8;
+    let v;
+    try { v = fn(t); }
+    catch (e) {
+      customError.textContent = `cannot evaluate at x ≈ ${t.toFixed(3)} — check your formula (e.g. did you mean π·(x) instead of π(x)?)`;
+      return;
+    }
+    if (typeof v !== 'number' || !isFinite(v)) {
+      customError.textContent = `function is undefined at x ≈ ${t.toFixed(3)} — check your formula or range`;
+      return;
+    }
+  }
   PRESETS.custom.f = fn;
   PRESETS.custom.a = Math.max(0.0001, a);
   PRESETS.custom.b = b;
-  PRESETS.custom.label = `y = ${exprStr.trim()}`;
-  PRESETS.custom.formula = `V = ∫ 2π · x · (${exprStr.trim()}) dx,  x ∈ [${a}, ${b}]`;
+  PRESETS.custom.label = `y = ${displayStr}`;
+  PRESETS.custom.formula = `V = ∫ 2π · x · (${displayStr}) dx,  x ∈ [${a}, ${b}]`;
+  // KaTeX titles/formulas use the MQ field's raw LaTeX directly — that's
+  // what the user typed and what the rendered math should mirror.
+  PRESETS.custom.titleLatex = `y = ${rawLatex}`;
+  PRESETS.custom.formulaLatex =
+    `V = \\int_{${a}}^{${b}} 2\\pi\\, x \\cdot \\bigl(${rawLatex}\\bigr)\\, dx`;
   if (activePresetKey === 'custom') {
     rebuild();
     frameCamera();
@@ -663,7 +1072,6 @@ function applyCustom() {
 }
 
 customApply.addEventListener('click', applyCustom);
-customExpr.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
 customA.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
 customB.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
 
@@ -678,9 +1086,8 @@ document.querySelectorAll('.presets button').forEach(b => {
     angleSlider.value = 360;
     customForm.classList.toggle('shown', activePresetKey === 'custom');
     if (activePresetKey === 'custom') {
-      // Make sure the placeholder picks up whatever's in the input
       applyCustom();
-      customExpr.focus();
+      if (window.mqState && window.mqState.expr) window.mqState.expr.focus();
     }
     syncLabels();
     rebuild();

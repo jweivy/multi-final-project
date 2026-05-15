@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>Washer Method · 3D Explorer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <style>
   :root {
     --bg: #0e1116;
@@ -152,6 +155,80 @@
     .overlay { max-width: 250px; padding: 10px 14px; }
     .overlay h2 { font-size: 17px; }
   }
+
+  /* ─── MathQuill dark-theme overrides ─── */
+  /* line-height: 1.0 keeps stretchy \left(\right) parens from scaling
+     to 1.8x for trivial content like sin(x). Fractions inside parens
+     still grow naturally because MQ scales to actual content height. */
+  #customForm .mq-editable-field {
+    background: var(--pill); color: var(--ink);
+    border: 1.5px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; min-width: 150px; min-height: 30px;
+    font-size: 14px; line-height: 1.0; cursor: text; vertical-align: middle;
+  }
+  #customForm .mq-editable-field.mq-focused {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px rgba(255,209,102,0.15);
+    outline: none;
+  }
+  #customForm .mq-cursor { border-color: var(--gold); }
+  #customForm .mq-selection { background: rgba(255,209,102,0.25); }
+  .kbd-toggle {
+    background: #1c2028; color: var(--gold);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 5px 10px; font-size: 15px; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s; line-height: 1;
+  }
+  .kbd-toggle:hover { border-color: var(--gold); background: #222832; }
+  .kbd-toggle.open { border-color: var(--gold); background: rgba(255,209,102,0.1); }
+
+  /* ─── Math Keyboard Popup ─── */
+  .kbd-popup {
+    position: fixed; z-index: 1000;
+    background: #12161c; border: 1px solid #1e2430; border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03);
+    display: none;
+  }
+  .kbd-popup.open { display: block; }
+  .kbd-layout { display: flex; gap: 10px; align-items: flex-start; }
+  .kbd-card {
+    background: #0e1116; border: 1px solid #1e2430; border-radius: 10px;
+    padding: 10px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .kbd-slabel {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: #3d4857; font-weight: 600; padding-left: 2px; margin-bottom: 2px;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+  }
+  .kbd-row { display: flex; gap: 4px; }
+  .kbd-divider { height: 1px; background: #1e2430; margin: 3px 0; border: none; }
+  .k {
+    min-width: 40px; min-height: 40px; padding: 0 6px; border-radius: 7px;
+    border: 1px solid transparent; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Times New Roman", Georgia, serif;
+    transition: background 0.12s, border-color 0.12s, transform 0.08s;
+    user-select: none;
+  }
+  .k:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
+  .k:active { transform: scale(0.94); box-shadow: none; }
+  .k-op { background: #1e1e10; color: #ffd166; border-color: #2a2810; font-family: sans-serif; }
+  .k-op:hover { background: #26260f; border-color: #ffd166; }
+  .k-struct { background: #141828; color: #c8d8ff; border-color: #1e2440; font-size: 12px; min-width: 50px; }
+  .k-struct:hover { background: #182030; border-color: #4060b0; }
+  .k-var { background: #201c08; color: #ffd166; border-color: #302a10; font-style: italic; font-size: 16px; }
+  .k-var:hover { background: #28230a; border-color: #ffd166; }
+  .k-const { background: #16121e; color: #c8a4ff; border-color: #241a34; font-style: italic; font-size: 15px; }
+  .k-const:hover { background: #1c1828; border-color: #8060c0; }
+  .k-del { background: #201416; color: #ff8a8a; border-color: #301a1c; font-size: 16px; font-family: sans-serif; }
+  .k-del:hover { background: #28181a; border-color: #ff6060; }
+  .k-fn { background: #101820; color: #8ab8e8; border-color: #182030;
+          font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; font-weight: 500; min-width: 44px; }
+  .k-fn:hover { background: #142030; border-color: #4080b0; color: #b0d4f8; }
+  .k-frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; font-size: 10px; gap: 1px; }
+  .k-frac span:first-child { border-bottom: 1px solid currentColor; padding: 0 4px; }
+  .k-frac span:last-child { padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -172,9 +249,10 @@
 
   <div id="customForm">
     <label>outer y =</label>
-    <input id="customOuter" type="text" value="sqrt(x) + 0.5" placeholder="e.g. sqrt(x) + 1">
+    <span id="customOuterMQ" class="mq-editable-field"></span>
     <label>inner y =</label>
-    <input id="customInner" type="text" value="0.3" placeholder="0 for disk">
+    <span id="customInnerMQ" class="mq-editable-field"></span>
+    <button id="kbdToggle" class="kbd-toggle" title="Open math keyboard">⌨</button>
     <label>x ∈ [</label>
     <input id="customA" type="number" value="0" step="0.1">
     <label>,</label>
@@ -182,7 +260,7 @@
     <label>]</label>
     <button id="customApply">apply</button>
     <span id="customError"></span>
-    <span id="customHelp">use <b>x</b>, <b>+ - * /</b>, <b>^</b> for power · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e · inner must satisfy |g(x)| ≤ |f(x)|</span>
+    <span id="customHelp">click a field, then use ⌨ keyboard · <b>x</b> is the variable · <b>*</b> for multiply · <b>^</b> for power · inner = 0 for disk</span>
   </div>
 
   <div id="scene-wrap">
@@ -230,6 +308,276 @@
   </footer>
 </div>
 
+<!-- Math Keyboard Popup -->
+<div id="mathKeyboard" class="kbd-popup">
+  <div class="kbd-layout">
+    <div class="kbd-card">
+      <div class="kbd-slabel">Symbols</div>
+      <div class="kbd-row">
+        <button class="k k-struct" data-action="frac" title="Fraction"><span class="k-frac"><span>□</span><span>□</span></span></button>
+        <button class="k k-struct" data-action="pow" title="Power">□<sup style="font-size:8px">□</sup></button>
+        <button class="k k-struct" data-action="sqrt" title="Square root">√□</button>
+        <button class="k k-struct" data-action="abs" title="Absolute value">|□|</button>
+        <button class="k k-var" data-action="typedText" data-arg="x">x</button>
+        <button class="k k-const" data-action="typedText" data-arg="π">π</button>
+        <button class="k k-const" data-action="typedText" data-arg="e">e</button>
+        <button class="k k-del" data-action="keystroke" data-arg="Backspace">⌫</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-op" data-action="typedText" data-arg="+">+</button>
+        <button class="k k-op" data-action="typedText" data-arg="-">−</button>
+        <button class="k k-op" data-action="typedText" data-arg="*">×</button>
+        <button class="k k-op" data-action="typedText" data-arg="/">÷</button>
+        <button class="k k-op" data-action="typedText" data-arg="(">(</button>
+        <button class="k k-op" data-action="typedText" data-arg=")">)</button>
+      </div>
+    </div>
+    <div class="kbd-card">
+      <div class="kbd-slabel">Trig &amp; Logarithms</div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="sin(">sin</button>
+        <button class="k k-fn" data-action="typedText" data-arg="cos(">cos</button>
+        <button class="k k-fn" data-action="typedText" data-arg="tan(">tan</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="csc(">csc</button>
+        <button class="k k-fn" data-action="typedText" data-arg="sec(">sec</button>
+        <button class="k k-fn" data-action="typedText" data-arg="cot(">cot</button>
+      </div>
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="arcsin(" style="min-width:55px">arcsin</button>
+        <button class="k k-fn" data-action="typedText" data-arg="arccos(" style="min-width:55px">arccos</button>
+        <button class="k k-fn" data-action="typedText" data-arg="arctan(" style="min-width:55px">arctan</button>
+      </div>
+      <hr class="kbd-divider">
+      <div class="kbd-row">
+        <button class="k k-fn" data-action="typedText" data-arg="ln(" style="flex:1;min-width:68px">ln</button>
+        <button class="k k-fn" data-action="typedText" data-arg="log(" style="flex:1;min-width:68px">log</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery + MathQuill (regular scripts, before the module) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathquill/0.10.1/mathquill.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  var MQ = MathQuill.getInterface(2);
+
+  // Expose MQ field handles so the ES-module script can read values
+  window.mqState = {};
+
+  var mqOuter = MQ.MathField(document.getElementById('customOuterMQ'), {
+    spaceBehavesLikeTab: false,
+    handlers: { enter: function () { document.getElementById('customApply').click(); } }
+  });
+  var mqInner = MQ.MathField(document.getElementById('customInnerMQ'), {
+    spaceBehavesLikeTab: false,
+    handlers: { enter: function () { document.getElementById('customApply').click(); } }
+  });
+  mqOuter.latex('\\sqrt{x}+0.5');
+  mqInner.latex('0.3');
+  window.mqState.outer = mqOuter;
+  window.mqState.inner = mqInner;
+
+  var popup    = document.getElementById('mathKeyboard');
+  var toggle   = document.getElementById('kbdToggle');
+  var activeMQ = mqOuter; // tracks which field was last clicked
+
+  function positionPopup() {
+    var rect = toggle.getBoundingClientRect();
+    var pw = popup.offsetWidth || 370;
+    popup.style.top  = (rect.bottom + 6) + 'px';
+    popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pw - 12)) + 'px';
+  }
+
+  function openPopup()  {
+    popup.classList.add('open'); toggle.classList.add('open');
+    positionPopup(); activeMQ.focus();
+  }
+  function closePopup() { popup.classList.remove('open'); toggle.classList.remove('open'); }
+
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    popup.classList.contains('open') ? closePopup() : openPopup();
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!popup.contains(e.target) && e.target !== toggle) closePopup();
+  });
+
+  popup.addEventListener('mousedown', function (e) { e.preventDefault(); });
+
+  popup.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn || !activeMQ) return;
+    switch (btn.dataset.action) {
+      case 'typedText': activeMQ.typedText(btn.dataset.arg); break;
+      case 'cmd':       activeMQ.cmd(btn.dataset.arg);       break;
+      case 'keystroke': activeMQ.keystroke(btn.dataset.arg); break;
+      case 'frac':  activeMQ.cmd('\\frac');  break;
+      case 'pow':   activeMQ.cmd('^');        break;
+      case 'sqrt':  activeMQ.cmd('\\sqrt');  break;
+      case 'abs':
+        activeMQ.write('\\left|\\right|');
+        activeMQ.keystroke('Left');
+        break;
+    }
+    activeMQ.focus();
+  });
+
+  // Track which field the user last clicked so keyboard targets it
+  document.getElementById('customOuterMQ').addEventListener('click', function () { activeMQ = mqOuter; });
+  document.getElementById('customInnerMQ').addEventListener('click', function () { activeMQ = mqInner; });
+
+  // ── LaTeX → JS expression converter ──────────────────────────────────────
+  // Known function names — a letter run matching one of these does NOT get
+  // an implicit '*' before its trailing '('. Anything else is a variable.
+  // Constants `pi`, `e` are NOT here — `\pi(x+1)` must become `pi*(x+1)`,
+  // not the function call `pi(x+1)`.
+  var FN_NAMES = /^(sin|cos|tan|csc|sec|cot|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|log10|exp|sqrt|cbrt|abs|pow|min|max|floor|ceil|round|sign|hypot)$/;
+
+  // Insert explicit '*' for implicit multiplication: `2x` → `2*x`,
+  // `cos(2x)` → `cos(2*x)`, `(x+1)(x-1)` → `(x+1)*(x-1)`.
+  function insertImplicitMul(s) {
+    var out = '', i = 0, n = s.length;
+    function readNum() {
+      var j = i; while (j < n && /[0-9.]/.test(s[j])) j++;
+      var t = s.slice(i, j); i = j; return t;
+    }
+    function readIdent() {
+      var j = i; while (j < n && /[a-zA-Z_]/.test(s[j])) j++;
+      var t = s.slice(i, j); i = j; return t;
+    }
+    var prev = '';
+    while (i < n) {
+      var c = s[i];
+      if (/[0-9.]/.test(c)) {
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += readNum(); prev = 'num';
+      } else if (/[a-zA-Z_]/.test(c)) {
+        var id = readIdent();
+        // Function call if next non-space char is '('. `e` and `pi` count
+        // as variables/constants, never functions.
+        var k = i; while (k < n && s[k] === ' ') k++;
+        var isFn = FN_NAMES.test(id) && s[k] === '(';
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += id;
+        prev = isFn ? 'fn' : 'var';
+      } else if (c === ' ') {
+        // Spaces from convert() act as identifier separators; drop them and
+        // let prev-state drive implicit '*' insertion.
+        i++;
+      } else if (c === '(') {
+        if (prev === 'num' || prev === 'var' || prev === 'rparen') out += '*';
+        out += c; i++; prev = '';
+      } else if (c === ')') {
+        out += c; i++; prev = 'rparen';
+      } else if (c === '*' && s[i+1] === '*') {
+        out += '**'; i += 2; prev = '';
+      } else {
+        out += c; i++;
+        if (/[+\-/^,]/.test(c)) prev = '';
+      }
+    }
+    return out;
+  }
+
+  window.latexToJS = function (latex) {
+    // Don't pre-strip whitespace: MathQuill emits `\pi x` (space-terminated
+    // cmd) and the cmd-reader needs that boundary. convert() skips spaces.
+    return insertImplicitMul(convert(latex));
+
+    function findClose(s, pos) {
+      var d = 0;
+      for (var i = pos; i < s.length; i++) {
+        if (s[i] === '{') d++;
+        else if (s[i] === '}' && --d === 0) return i;
+      }
+      return s.length - 1;
+    }
+
+    function convert(s) {
+      var out = '', i = 0;
+      // Emit text from a translated LaTeX cmd. Pads with spaces on either
+      // side when needed so adjacent typed letters/digits don't merge with
+      // it — e.g. `x\sin(y)` would otherwise become `xsin(y)` (one variable),
+      // and `2\pi x` would become `2pix`.
+      function emit(text) {
+        if (out && /[a-zA-Z0-9_]$/.test(out) && /^[a-zA-Z_]/.test(text)) out += ' ';
+        out += text;
+        if (/[a-zA-Z_]$/.test(text)) out += ' ';
+      }
+      while (i < s.length) {
+        var c = s[i];
+        if (c === '\\') {
+          var j = i + 1;
+          while (j < s.length && /[a-zA-Z]/.test(s[j])) j++;
+          var cmd = s.slice(i + 1, j);
+          i = j;
+          if (cmd === 'frac') {
+            var nc = findClose(s, i), num = s.slice(i + 1, nc); i = nc + 1;
+            var dc = findClose(s, i), den = s.slice(i + 1, dc); i = dc + 1;
+            out += '((' + convert(num) + ')/(' + convert(den) + '))';
+          } else if (cmd === 'sqrt') {
+            if (s[i] === '[') { i = s.indexOf(']', i) + 1; }
+            var sc = findClose(s, i), sa = s.slice(i + 1, sc); i = sc + 1;
+            emit('sqrt(' + convert(sa) + ')');
+          } else if (cmd === 'left') {
+            var dl = s[i++];
+            if (dl === '|') {
+              var ri = s.indexOf('\\right|', i);
+              if (ri !== -1) { emit('abs(' + convert(s.slice(i, ri)) + ')'); i = ri + 7; }
+              else { out += '|'; }
+            } else if (dl === '.') {
+              // \left. is an invisible delimiter — emit nothing
+            } else {
+              out += (dl === '(' || dl === '[') ? '(' : dl;
+            }
+          } else if (cmd === 'right') {
+            var dr = s[i++];
+            if (dr === '|' || dr === '.') {
+              // \right| handled above; \right. is invisible — emit nothing
+            } else out += ')';
+          } else {
+            var MAP = {
+              pi:'pi', cdot:'*', times:'*', div:'/',
+              sin:'sin', cos:'cos', tan:'tan',
+              csc:'csc', sec:'sec', cot:'cot',
+              arcsin:'arcsin', arccos:'arccos', arctan:'arctan',
+              ln:'ln', log:'log10', exp:'exp',
+            };
+            emit((MAP[cmd] !== undefined) ? MAP[cmd] : cmd);
+          }
+        } else if (c === '^') {
+          i++;
+          if (s[i] === '{') {
+            var ec = findClose(s, i), ep = s.slice(i + 1, ec); i = ec + 1;
+            out += '**(' + convert(ep) + ')';
+          } else { out += '**(' + s[i++] + ')'; }
+        } else if (c === '{') {
+          var gc = findClose(s, i), gp = s.slice(i + 1, gc); i = gc + 1;
+          out += '(' + convert(gp) + ')';
+        } else if (c === '}') {
+          i++;
+        } else if (c === '_') {
+          i++;
+          if (s[i] === '{') { i = findClose(s, i) + 1; } else i++;
+        } else if (/\s/.test(c)) {
+          // skip whitespace — it served as a cmd terminator already
+          i++;
+        } else {
+          out += c; i++;
+        }
+      }
+      return out;
+    }
+  };
+}());
+</script>
+
 <script type="importmap">
 {
   "imports": {
@@ -257,6 +605,8 @@ const PRESETS = {
   'disk-sqrt': {
     label: 'disk: y = √x',
     formula: 'V = π ∫₀⁴ (√x)² dx',
+    titleLatex: '\\text{disk: } y = \\sqrt{x}',
+    formulaLatex: 'V = \\pi\\int_0^4 \\bigl(\\sqrt{x}\\bigr)^2\\, dx',
     f: x => Math.sqrt(x),
     g: ZERO,
     a: 0.0001, b: 4.0,
@@ -264,6 +614,8 @@ const PRESETS = {
   'disk-parabola': {
     label: 'disk: y = x² / 2',
     formula: 'V = π ∫₀² (x²/2)² dx',
+    titleLatex: '\\text{disk: } y = \\dfrac{x^2}{2}',
+    formulaLatex: 'V = \\pi\\int_0^2 \\left(\\dfrac{x^2}{2}\\right)^2\\, dx',
     f: x => 0.5 * x * x,
     g: ZERO,
     a: 0.0001, b: 2.0,
@@ -271,6 +623,8 @@ const PRESETS = {
   'washer-line-parabola': {
     label: 'washer: f = x, g = x²',
     formula: 'V = π ∫₀¹ (x² − x⁴) dx',
+    titleLatex: '\\text{washer: } f = x,\\; g = x^2',
+    formulaLatex: 'V = \\pi\\int_0^1 \\bigl(x^2 - x^4\\bigr)\\, dx',
     f: x => x,
     g: x => x * x,
     a: 0.0001, b: 1.0,
@@ -278,6 +632,8 @@ const PRESETS = {
   'washer-shifted-sine': {
     label: 'washer: f = sin(x)+1, g = 0.5',
     formula: 'V = π ∫₀^π ((sin x + 1)² − 0.25) dx',
+    titleLatex: '\\text{washer: } f = \\sin(x)+1,\\; g = 0.5',
+    formulaLatex: 'V = \\pi\\int_0^{\\pi} \\Bigl(\\bigl(\\sin x + 1\\bigr)^2 - 0.25\\Bigr)\\, dx',
     f: x => Math.sin(x) + 1,
     g: x => 0.5,
     a: 0.0001, b: Math.PI,
@@ -285,11 +641,25 @@ const PRESETS = {
   custom: {
     label: 'custom',
     formula: 'V = π ∫ (f² − g²) dx',
+    titleLatex: '\\text{washer (custom)}',
+    formulaLatex: 'V = \\pi\\int \\bigl(f^2 - g^2\\bigr)\\, dx',
     f: x => Math.sqrt(x) + 0.5,
     g: x => 0.3,
     a: 0.0001, b: 4.0,
   },
 };
+
+// KaTeX render with plain-text fallback if the CDN didn't load.
+function renderMath(el, latex, displayMode = false) {
+  if (!el) return;
+  if (typeof katex !== 'undefined') {
+    try {
+      katex.render(latex, el, { displayMode, throwOnError: false, output: 'html' });
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  el.textContent = latex;
+}
 let N_SHELLS = 24;
 
 const canvas = document.getElementById('scene');
@@ -347,31 +717,41 @@ function disposeGroup(group) {
 }
 
 function compileExpression(raw) {
-  if (raw === undefined || raw === null) throw new Error('expression missing');
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
   let s = String(raw).trim().toLowerCase();
-  if (!s) throw new Error('expression is empty');
   s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
-  // Insert * for implicit multiplication FIRST: 2pi → 2*pi, 3sin(x) → 3*sin(x),
-  // (x+1)(x-1) → (x+1)*(x-1). Lookahead preserves scientific notation 1e-3.
+  s = s.replace(/×/g, '*').replace(/÷/g, '/');
+  // Implicit multiplication: 2x → 2*x, 3sin(x) → 3*sin(x), (x+1)(x-1) → (x+1)*(x-1).
+  // Lookahead preserves scientific notation 1e-3. (pi/e resolve via mathScope.)
   s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
   s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
-  // THEN resolve lowercase constants. `with(Math)` exposes PI/E uppercase only.
-  s = s.replace(/\bpi\b/g, 'PI');
-  s = s.replace(/\be\b/g, 'E');
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
-  let fn;
+  const mathScope = {
+    pi: Math.PI, e: Math.E,
+    abs: Math.abs, sqrt: Math.sqrt, cbrt: Math.cbrt,
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan,
+    log: Math.log, ln: Math.log, log10: Math.log10, exp: Math.exp,
+    pow: Math.pow, ceil: Math.ceil, floor: Math.floor, round: Math.round,
+    min: Math.min, max: Math.max, sign: Math.sign, hypot: Math.hypot,
+    csc: x => 1 / Math.sin(x),
+    sec: x => 1 / Math.cos(x),
+    cot: x => Math.cos(x) / Math.sin(x),
+    arcsin: Math.asin, arccos: Math.acos, arctan: Math.atan,
+  };
   try {
-    fn = new Function('x', `with (Math) { return (${s}); }`);
+    const factory = new Function('__m__', `return function(x){ with(__m__){ return (${s}); }; }`);
+    return factory(mathScope);
   } catch (e) {
     throw new Error('syntax error — check your parentheses and operators');
   }
-  for (const t of [0.01, 0.5, 1, 2]) {
-    const v = fn(t);
-    if (typeof v !== 'number' || !isFinite(v)) {
-      throw new Error(`function gives a non-number at x = ${t}`);
-    }
-  }
-  return fn;
+}
+
+function jsPretty(s) {
+  if (!s) return s;
+  s = s.replace(/\*\*\((\w+)\)/g, '^$1');
+  s = s.replace(/\(\((.+?)\)\/\((.+?)\)\)/g, '$1/$2');
+  return s;
 }
 
 function gradientColor(stops, t) {
@@ -580,8 +960,8 @@ function rebuild() {
 
   controls.target.set((a + b) / 2, 0, 0);
 
-  document.getElementById('ovTitle').textContent = p.label;
-  document.getElementById('ovFormula').textContent = p.formula;
+  renderMath(document.getElementById('ovTitle'), p.titleLatex || p.label);
+  renderMath(document.getElementById('ovFormula'), p.formulaLatex || p.formula);
   document.getElementById('ovVol').textContent = washerVolume(f, g, a, b).toFixed(3);
 
   const [g0, g1, g2] = POSITIVE_GRADIENT.map(h => '#' + h.toString(16).padStart(6, '0'));
@@ -672,8 +1052,6 @@ angleSlider.addEventListener('input', e => {
 });
 
 const customForm = document.getElementById('customForm');
-const customOuter = document.getElementById('customOuter');
-const customInner = document.getElementById('customInner');
 const customA = document.getElementById('customA');
 const customB = document.getElementById('customB');
 const customApply = document.getElementById('customApply');
@@ -687,17 +1065,60 @@ function applyCustom() {
     customError.textContent = 'need a < b';
     return;
   }
+  // Read expressions from MathQuill fields
+  const mqOuter = window.mqState && window.mqState.outer;
+  const mqInner = window.mqState && window.mqState.inner;
+  const outerLatex = mqOuter ? mqOuter.latex() : '';
+  const innerLatex = mqInner ? mqInner.latex() : '';
+  const outerJS = outerLatex ? window.latexToJS(outerLatex) : '';
+  const innerJS = innerLatex ? window.latexToJS(innerLatex) : '';
+
+  if (!outerJS) { customError.textContent = 'outer expression is empty'; return; }
+  if (!innerJS && innerLatex !== '') { customError.textContent = 'inner expression error'; return; }
+  const innerJSFinal = innerJS || '0';
+
+  const outerDisplay = jsPretty(outerJS);
+  const innerDisplay = jsPretty(innerJSFinal);
+
   let fn, gn;
-  try { fn = compileExpression(customOuter.value); }
+  try { fn = compileExpression(outerJS); }
   catch (e) { customError.textContent = 'outer: ' + e.message; return; }
-  try { gn = compileExpression(customInner.value); }
+  try { gn = compileExpression(innerJSFinal); }
   catch (e) { customError.textContent = 'inner: ' + e.message; return; }
+
+  for (let k = 0; k <= 8; k++) {
+    const t = a + (b - a) * k / 8;
+    let vf, vg;
+    try { vf = fn(t); }
+    catch (e) {
+      customError.textContent = `outer: cannot evaluate at x ≈ ${t.toFixed(3)} — check your formula`;
+      return;
+    }
+    try { vg = gn(t); }
+    catch (e) {
+      customError.textContent = `inner: cannot evaluate at x ≈ ${t.toFixed(3)} — check your formula`;
+      return;
+    }
+    if (typeof vf !== 'number' || !isFinite(vf)) {
+      customError.textContent = `outer is undefined at x ≈ ${t.toFixed(3)} — check your formula or range`;
+      return;
+    }
+    if (typeof vg !== 'number' || !isFinite(vg)) {
+      customError.textContent = `inner is undefined at x ≈ ${t.toFixed(3)} — check your formula or range`;
+      return;
+    }
+  }
   PRESETS.custom.f = fn;
   PRESETS.custom.g = gn;
   PRESETS.custom.a = Math.max(0.0001, a);
   PRESETS.custom.b = b;
-  PRESETS.custom.label = `washer: f = ${customOuter.value.trim()}, g = ${customInner.value.trim()}`;
-  PRESETS.custom.formula = `V = π ∫ ((${customOuter.value.trim()})² − (${customInner.value.trim()})²) dx,  x ∈ [${a}, ${b}]`;
+  PRESETS.custom.label = `washer: f = ${outerDisplay}, g = ${innerDisplay}`;
+  PRESETS.custom.formula = `V = π ∫ ((${outerDisplay})² − (${innerDisplay})²) dx,  x ∈ [${a}, ${b}]`;
+  // KaTeX titles/formulas mirror what the user typed into the MQ fields.
+  PRESETS.custom.titleLatex =
+    `\\text{washer: } f = ${outerLatex},\\; g = ${innerLatex || '0'}`;
+  PRESETS.custom.formulaLatex =
+    `V = \\pi\\int_{${a}}^{${b}} \\Bigl(\\bigl(${outerLatex}\\bigr)^2 - \\bigl(${innerLatex || '0'}\\bigr)^2\\Bigr)\\, dx`;
   if (activePresetKey === 'custom') {
     rebuild();
     frameCamera();
@@ -705,7 +1126,7 @@ function applyCustom() {
 }
 
 customApply.addEventListener('click', applyCustom);
-[customOuter, customInner, customA, customB].forEach(inp => {
+[customA, customB].forEach(inp => {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') applyCustom(); });
 });
 
@@ -721,7 +1142,7 @@ document.querySelectorAll('.presets button').forEach(b => {
     customForm.classList.toggle('shown', activePresetKey === 'custom');
     if (activePresetKey === 'custom') {
       applyCustom();
-      customOuter.focus();
+      if (window.mqState && window.mqState.outer) window.mqState.outer.focus();
     }
     syncLabels();
     rebuild();

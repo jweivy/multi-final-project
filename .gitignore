@@ -10,6 +10,8 @@ desktop.ini
 
 # Local dev / tooling (not part of the project itself)
 .claude/
+.superpowers/
+graphify-out/
 
 # Logs
 *.log
