@@ -963,17 +963,53 @@ function fmtAngleText(rad) {
 }
 
 function drawTutorialSlice(p, outerFn, innerFn, [iA, iB], progFrac) {
-  // animate a slice at the middle of the main interval
-  const thC = (iA + iB) / 2;
-  const dTheta = 0.18 * (0.5 + 0.5 * Math.sin(progFrac * PI));
-  const t0 = thC - dTheta / 2, t1 = thC + dTheta / 2;
-  const innerR = p.mode === 'single' ? 0 : innerFn(thC);
-  drawRingSlice(t0, t1, (th) => p.mode === 'single' ? 0 : innerFn(th), outerFn, C.shade, C.shadeEdge);
-  // labels
-  const rOut = outerFn(thC);
-  noStroke(); fill(C.ink); textSize(11.5); textAlign(LEFT, CENTER);
-  text('r_outer', mx(rOut * Math.cos(thC)) + 10, my(rOut * Math.sin(thC)) - 6);
-  if (p.mode !== 'single') text('r_inner', mx(innerR * Math.cos(thC)) + 10, my(innerR * Math.sin(thC)) - 6);
+  // Show a series of single radial lines — each one IS a dA — appearing in
+  // sequence across the main interval. The line runs from r_inner(θ) to
+  // r_outer(θ) (or origin to r_outer in single-curve mode). A faint thin
+  // line continues from origin to inner so students can see what's being
+  // "subtracted" off when the inner curve is present.
+  const N = 9;                                      // number of dA lines
+  const range = iB - iA;
+  const stride = 1 / N;                             // window each line claims
+  const fadeIn = 0.08;                              // proportion used for fade
+  let middleTheta = (iA + iB) / 2, middleR = null;
+
+  for (let i = 0; i < N; i++) {
+    const showAt = (i + 0.5) * stride;
+    const op = Math.max(0, Math.min(1, (progFrac - showAt + fadeIn) / fadeIn));
+    if (op <= 0) continue;
+    const theta = iA + (i + 0.5) * stride * range;
+    const rOut = Math.max(0, outerFn(theta));
+    const rIn  = p.mode === 'single' ? 0 : Math.max(0, innerFn(theta));
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+
+    // faint origin → inner segment (only when there's a real inner curve)
+    if (p.mode !== 'single' && rIn > 0.01) {
+      stroke(`rgba(122, 135, 148, ${op * 0.55})`); strokeWeight(1);
+      line(mx(0), my(0), mx(rIn * cosT), my(rIn * sinT));
+    }
+    // bright inner → outer segment — this IS one dA
+    stroke(`rgba(255, 209, 102, ${op})`); strokeWeight(2.2);
+    line(mx(rIn * cosT), my(rIn * sinT), mx(rOut * cosT), my(rOut * sinT));
+    // small tip at outer endpoint
+    noStroke(); fill(`rgba(255, 209, 102, ${op})`);
+    circle(mx(rOut * cosT), my(rOut * sinT), 4.5);
+
+    // remember the middle line so we can put the dA label there
+    if (i === Math.floor(N / 2)) {
+      middleTheta = theta;
+      middleR = (rIn + rOut) / 2;
+    }
+  }
+
+  // "dA" label on the middle line once it's visible
+  if (middleR !== null && progFrac > 0.45) {
+    const labelOp = Math.min(1, (progFrac - 0.45) / 0.10);
+    noStroke(); fill(`rgba(255, 209, 102, ${labelOp})`); textSize(13);
+    textAlign(LEFT, CENTER);
+    text('dA', mx(middleR * Math.cos(middleTheta)) + 10,
+              my(middleR * Math.sin(middleTheta)) - 10);
+  }
 }
 
 function drawAccumulatedRegion(outerFn, innerFn, t0, t1, mode) {
