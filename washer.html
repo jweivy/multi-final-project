@@ -351,10 +351,13 @@ function compileExpression(raw) {
   let s = String(raw).trim().toLowerCase();
   if (!s) throw new Error('expression is empty');
   s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
-  // Insert * for implicit multiplication: 2x → 2*x, 3sin(x) → 3*sin(x),
-  // (x+1)(x-1) → (x+1)*(x-1). Skip scientific notation like 1e-3.
-  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-z(])/g, '$1*$2');
-  s = s.replace(/(\))(\s*[\da-z(])/g, '$1*$2');
+  // Insert * for implicit multiplication FIRST: 2pi → 2*pi, 3sin(x) → 3*sin(x),
+  // (x+1)(x-1) → (x+1)*(x-1). Lookahead preserves scientific notation 1e-3.
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  // THEN resolve lowercase constants. `with(Math)` exposes PI/E uppercase only.
+  s = s.replace(/\bpi\b/g, 'PI');
+  s = s.replace(/\be\b/g, 'E');
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
   let fn;
   try {

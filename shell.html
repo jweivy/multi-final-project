@@ -339,11 +339,15 @@ function compileExpression(raw) {
   let s = raw.trim().toLowerCase();
   s = s.replace(/π/g, 'pi');
   s = s.replace(/\^/g, '**');
-  // Insert * for implicit multiplication so kids can write 2x, 3sin(x), 2(x+1),
-  // (x+1)(x-1) the way they would on paper. The negative-lookahead on the first
-  // rule skips scientific notation like 1e-3 so we don't break it.
-  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-z(])/g, '$1*$2');
-  s = s.replace(/(\))(\s*[\da-z(])/g, '$1*$2');
+  // Insert * for implicit multiplication FIRST so 2pi/3sin(x)/(x+1)(x-1) all
+  // get *'s in. The lookahead on the first rule preserves scientific notation
+  // like 1e-3.
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  // THEN resolve lowercase constants. `with(Math)` exposes PI/E uppercase
+  // only, so bare `pi`/`e` would otherwise fail.
+  s = s.replace(/\bpi\b/g, 'PI');
+  s = s.replace(/\be\b/g, 'E');
   // Disallow bare `=` or `;` to avoid surprise multi-statement bodies
   if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
   let fn;
