@@ -778,15 +778,28 @@ function buildTabA() {
   const yMax = Math.max(...finiteYs);
   const trueClipped = clipY(trueYs, yMin, yMax);
 
-  // Halo behind the gold curve to fake stroke weight (linewidth is ignored on most platforms).
-  const haloPoints = [];
+  // TubeGeometry gives real screen-space thickness (WebGL ignores linewidth).
+  // depthTest:false + renderOrder:10 keeps it on top of every polynomial line.
+  // Split into continuous runs so NaN gaps (e.g. asymptotes) don't corrupt the curve.
+  const addGoldTube = (pts) => {
+    if (pts.length < 2) return;
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const geom = new THREE.TubeGeometry(curve, pts.length, 0.035, 6, false);
+    const mat = new THREE.MeshBasicMaterial({ color: GOLD, depthTest: false });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.renderOrder = 10;
+    stage.add(mesh);
+  };
+  let run = [];
   for (let i = 0; i < xs.length; i++) {
-    if (!isFinite(trueClipped[i])) continue;
-    haloPoints.push(new THREE.Vector3(xs[i], trueClipped[i], -0.005));
+    if (isFinite(trueClipped[i])) {
+      run.push(new THREE.Vector3(xs[i], trueClipped[i], 0));
+    } else {
+      addGoldTube(run);
+      run = [];
+    }
   }
-  const haloMat = new THREE.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0.25 });
-  stage.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(haloPoints), haloMat));
-  stage.add(buildPolyline(xs, trueClipped, GOLD, 1.0));
+  addGoldTube(run);
 
   for (let k = 0; k <= order; k++) {
     const coeffs = coefficientsAt(currentPreset, center, k);
