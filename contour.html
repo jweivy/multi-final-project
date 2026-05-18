@@ -118,6 +118,37 @@
     display: inline-block; width: 10px; height: 10px; border-radius: 2px;
     vertical-align: middle; margin-right: 6px;
   }
+  /* Floating labels that follow points/edges in 3D and 2D scenes. */
+  .label3d, .label2d {
+    position: absolute;
+    background: rgba(14, 17, 22, 0.88);
+    color: var(--gold);
+    border: 1px solid rgba(255, 209, 102, 0.45);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-family: "Courier New", monospace;
+    font-style: italic;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    z-index: 5;
+  }
+  .label3d.df { color: #ff7eb6; border-color: rgba(255, 126, 182, 0.45); }
+  .probe-stats {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--pill-border);
+    color: var(--ink);
+    font-family: "Courier New", monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .probe-stats .row { display: flex; justify-content: space-between; gap: 14px; }
+  .probe-stats .val { color: var(--gold); }
+  .probe-stats .lbl-soft { color: var(--soft); font-style: italic; font-size: 10.5px; margin-bottom: 4px; }
+  #pane2d { cursor: crosshair; }
 
   footer {
     padding: 12px 24px; display: grid;
@@ -204,18 +235,32 @@
           <div><span class="swatch" style="background: var(--gold);"></span>contour where f(x, y) = c</div>
           <div style="margin-top:4px; font-style:italic;">drag to rotate · scroll to zoom</div>
         </div>
+        <div class="probe-stats">
+          <div class="lbl-soft">at probe (drag the orange dot on the map)</div>
+          <div class="row"><span>(x, y)</span><span class="val" id="ovProbeXY">(0.00, 0.00)</span></div>
+          <div class="row"><span>∂f/∂x</span><span class="val" id="ovDfdx">0.00</span></div>
+          <div class="row"><span>∂f/∂y</span><span class="val" id="ovDfdy">0.00</span></div>
+          <div class="row"><span>|∇f| = √(fx² + fy²)</span><span class="val" id="ovGmag">0.00</span></div>
+        </div>
       </div>
+      <span class="label3d" id="lblDx">dx</span>
+      <span class="label3d" id="lblDy">dy</span>
+      <span class="label3d df" id="lblDf">df</span>
     </div>
     <div class="pane" id="pane2d">
       <canvas id="canvas2d"></canvas>
-      <div class="pane-label">2d contour map</div>
+      <div class="pane-label">2d contour map · steep = lines crowd together</div>
       <div class="overlay">
         <h2 style="font-size:15px;">level set: <b id="ovLevel2">f(x, y) = 0.00</b></h2>
         <div class="legend">
           <div><span class="swatch" style="background: rgba(106, 169, 255, 0.35);"></span>other level lines</div>
           <div><span class="swatch" style="background: var(--gold);"></span>current level (matches plane)</div>
+          <div><span class="swatch" style="background: linear-gradient(90deg, #1a1d22, #ff7eb6);"></span>steepness |∇f| · darker pink = steeper</div>
+          <div><span class="swatch" style="background: #ff8a3d;"></span>probe · drag me</div>
+          <div><span class="swatch" style="background: var(--gold); border-radius: 50%; height: 6px; margin-top: 2px;"></span>∇f points uphill, ⟂ to contour</div>
         </div>
       </div>
+      <span class="label2d" id="lblGrad">∇f</span>
     </div>
   </div>
 
@@ -374,7 +419,9 @@ function marchingSquares(grid, c, xs, ys) {
   return segs;
 }
 
-// Sample f on an Nx × Ny grid over [xa, xb] × [ya, yb].
+// Sample f on an Nx × Ny grid over [xa, xb] × [ya, yb], plus |∇f| via central
+// differences — the gradient-magnitude grid is what drives the steepness
+// heatmap and feeds the probe's ∂f/∂x, ∂f/∂y readouts.
 function sampleGrid(f, xa, xb, ya, yb, Nx, Ny) {
   const xs = new Float64Array(Nx), ys = new Float64Array(Ny);
   for (let i = 0; i < Nx; i++) xs[i] = xa + (xb - xa) * i / (Nx - 1);
@@ -391,7 +438,45 @@ function sampleGrid(f, xa, xb, ya, yb, Nx, Ny) {
     }
     grid[j] = row;
   }
-  return { xs, ys, grid, zMin, zMax };
+  // |∇f| via central differences (forward/backward at edges)
+  const gradMag = new Array(Ny);
+  let gMax = 0;
+  for (let j = 0; j < Ny; j++) {
+    gradMag[j] = new Float64Array(Nx);
+    for (let i = 0; i < Nx; i++) {
+      const i0 = Math.max(0, i - 1), i1 = Math.min(Nx - 1, i + 1);
+      const j0 = Math.max(0, j - 1), j1 = Math.min(Ny - 1, j + 1);
+      const dfdx = (grid[j][i1] - grid[j][i0]) / Math.max(1e-9, xs[i1] - xs[i0]);
+      const dfdy = (grid[j1][i] - grid[j0][i]) / Math.max(1e-9, ys[j1] - ys[j0]);
+      const m = Math.sqrt(dfdx * dfdx + dfdy * dfdy);
+      gradMag[j][i] = m;
+      if (m > gMax) gMax = m;
+    }
+  }
+  return { xs, ys, grid, zMin, zMax, gradMag, gMax };
+}
+
+// Bilinear interpolation on a sampled grid at world (x, y).
+function bilerp(grid, xs, ys, x, y) {
+  const Nx = xs.length, Ny = ys.length;
+  const dx = xs[1] - xs[0], dy = ys[1] - ys[0];
+  let i = Math.floor((x - xs[0]) / dx);
+  let j = Math.floor((y - ys[0]) / dy);
+  i = Math.max(0, Math.min(Nx - 2, i));
+  j = Math.max(0, Math.min(Ny - 2, j));
+  const u = (x - xs[i]) / dx;
+  const v = (y - ys[j]) / dy;
+  const v00 = grid[j][i], v10 = grid[j][i + 1];
+  const v01 = grid[j + 1][i], v11 = grid[j + 1][i + 1];
+  return (1 - u) * (1 - v) * v00 + u * (1 - v) * v10 + (1 - u) * v * v01 + u * v * v11;
+}
+
+// ∂f/∂x and ∂f/∂y at world (x, y) via central differences on the analytic f.
+function partials(f, x, y, h) {
+  return {
+    fx: (f(x + h, y) - f(x - h, y)) / (2 * h),
+    fy: (f(x, y + h) - f(x, y - h)) / (2 * h),
+  };
 }
 
 // =============================================================================
@@ -461,7 +546,7 @@ function disposeGroup(g) {
 // =============================================================================
 // STATE
 // =============================================================================
-let sampled = null;     // { xs, ys, grid, zMin, zMax }
+let sampled = null;     // { xs, ys, grid, zMin, zMax, gradMag, gMax }
 let cuttingLevel = 0;   // current z = c
 let playing = false;
 let sweepDir = 1;
@@ -470,6 +555,13 @@ let lastTime = 0;
 let cuttingMesh = null;
 let highlightLine3d = null;
 let highlightLine2d = null;
+// Probe — the user drags this on the 2D map; it shows ∂f/∂x, ∂f/∂y, |∇f|.
+let probe = { x: 0, y: 0, dragging: false };
+let probeMesh2d = null;     // orange dot on the 2D map
+let probeMesh3d = null;     // orange dot on the 3D surface
+let gradArrow2d = null;     // gradient vector on the 2D map
+let riseTri3d = null;       // dx/dy/df triangle on the 3D surface
+let heatmapMesh = null;     // |∇f| color underneath the 2D contours
 
 // =============================================================================
 // BUILD SCENES
@@ -490,6 +582,10 @@ function rebuild() {
   // sync slider
   document.getElementById('levelSlider').value = 500;
   updateCuttingPlane();
+  // place probe at the center by default
+  probe.x = (xa + xb) / 2;
+  probe.y = (ya + yb) / 2;
+  updateProbe();
   frame3DCamera([xa, xb], [ya, yb], [sampled.zMin, sampled.zMax]);
   fit2DCamera([xa, xb], [ya, yb]);
   renderOverlay(p);
@@ -560,13 +656,19 @@ function build3DSurface({ xs, ys, grid, zMin, zMax }, [xa, xb], [ya, yb]) {
   stage3d.add(highlightLine3d);
 }
 
-function build2DBaseContours({ xs, ys, grid, zMin, zMax }, [xa, xb], [ya, yb]) {
+function build2DBaseContours({ xs, ys, grid, zMin, zMax, gradMag, gMax }, [xa, xb], [ya, yb]) {
   // Light background tint for orientation
   const bgGeom = new THREE.PlaneGeometry(xb - xa, yb - ya);
   const bgMat = new THREE.MeshBasicMaterial({ color: 0x12161d });
   const bg = new THREE.Mesh(bgGeom, bgMat);
   bg.position.set((xa + xb) / 2, (ya + yb) / 2, -1);
   stage2d.add(bg);
+
+  // |∇f| heatmap: a per-vertex-colored plane underneath the contours.
+  // Pink intensity ∝ steepness, so steep regions (where contours crowd
+  // together) read visibly darker on the map. This is the visual hook for
+  // "close lines ⇔ big |∇f|".
+  buildHeatmap(xs, ys, gradMag, gMax);
 
   // grid lines
   const gridStep = 0.5;
@@ -655,6 +757,158 @@ function renderOverlay(p) {
 }
 
 // =============================================================================
+// HEATMAP — |∇f| color underneath the 2D contour lines
+// =============================================================================
+function buildHeatmap(xs, ys, gradMag, gMax) {
+  const Nx = xs.length, Ny = ys.length;
+  const positions = new Float32Array(Nx * Ny * 3);
+  const colors = new Float32Array(Nx * Ny * 3);
+  // base + steep colors
+  const baseCol = new THREE.Color(0x12161d);
+  const steepCol = new THREE.Color(0xff7eb6);  // pink for steep
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const k = (j * Nx + i) * 3;
+      positions[k]     = xs[i];
+      positions[k + 1] = ys[j];
+      positions[k + 2] = -0.5;
+      const t = gMax > 1e-9 ? Math.min(1, gradMag[j][i] / gMax) : 0;
+      const c = new THREE.Color().lerpColors(baseCol, steepCol, t * 0.85);
+      colors[k] = c.r; colors[k + 1] = c.g; colors[k + 2] = c.b;
+    }
+  }
+  const indices = [];
+  for (let j = 0; j < Ny - 1; j++) {
+    for (let i = 0; i < Nx - 1; i++) {
+      const a = j * Nx + i, b = a + 1, c = a + Nx, d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setIndex(indices);
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  heatmapMesh = new THREE.Mesh(geom, mat);
+  stage2d.add(heatmapMesh);
+}
+
+// =============================================================================
+// PROBE — draggable point on 2D map; drives ∂f/∂x, ∂f/∂y, ∇f arrow, and the
+// dx/dy/df triangle on the 3D surface.
+// =============================================================================
+function updateProbe() {
+  if (!sampled) return;
+  const p = PRESETS[activePresetKey];
+  const [xa, xb] = p.x, [ya, yb] = p.y;
+  probe.x = Math.max(xa, Math.min(xb, probe.x));
+  probe.y = Math.max(ya, Math.min(yb, probe.y));
+
+  // partials via central differences on the analytic f
+  const hx = (xb - xa) * 0.005;
+  const hy = (yb - ya) * 0.005;
+  const fx = (p.f(probe.x + hx, probe.y) - p.f(probe.x - hx, probe.y)) / (2 * hx);
+  const fy = (p.f(probe.x, probe.y + hy) - p.f(probe.x, probe.y - hy)) / (2 * hy);
+  const gm = Math.sqrt(fx * fx + fy * fy);
+  const fAt = p.f(probe.x, probe.y);
+
+  // ── 2D map: orange dot + gradient arrow
+  if (probeMesh2d) { stage2d.remove(probeMesh2d); probeMesh2d.geometry.dispose(); probeMesh2d.material.dispose(); }
+  if (gradArrow2d) { stage2d.remove(gradArrow2d); gradArrow2d.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const dotGeom = new THREE.CircleGeometry(Math.min(xb - xa, yb - ya) * 0.013, 24);
+  const dotMat  = new THREE.MeshBasicMaterial({ color: 0xff8a3d });
+  probeMesh2d = new THREE.Mesh(dotGeom, dotMat);
+  probeMesh2d.position.set(probe.x, probe.y, 3);
+  stage2d.add(probeMesh2d);
+
+  // gradient arrow on 2D — direction = (fx, fy), normalized; length scales with |∇f|/gMax
+  gradArrow2d = new THREE.Group();
+  if (gm > 1e-6) {
+    const span = Math.min(xb - xa, yb - ya);
+    const len = Math.max(span * 0.10, span * 0.30 * (gm / Math.max(1e-9, sampled.gMax)));
+    const ux = fx / gm, uy = fy / gm;
+    const ex = probe.x + ux * len, ey = probe.y + uy * len;
+    const shaft = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(probe.x, probe.y, 2.5),
+        new THREE.Vector3(ex, ey, 2.5)
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xffd166, linewidth: 2 })
+    );
+    gradArrow2d.add(shaft);
+    // arrow head: two short lines off the tip
+    const headLen = len * 0.22;
+    const cosA = Math.cos(2.7), sinA = Math.sin(2.7);  // ~155°
+    const cosB = Math.cos(-2.7), sinB = Math.sin(-2.7);
+    const h1x = ex + (ux * cosA - uy * sinA) * headLen;
+    const h1y = ey + (ux * sinA + uy * cosA) * headLen;
+    const h2x = ex + (ux * cosB - uy * sinB) * headLen;
+    const h2y = ey + (ux * sinB + uy * cosB) * headLen;
+    const head = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(ex, ey, 2.5), new THREE.Vector3(h1x, h1y, 2.5),
+        new THREE.Vector3(ex, ey, 2.5), new THREE.Vector3(h2x, h2y, 2.5),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xffd166 })
+    );
+    gradArrow2d.add(head);
+    gradArrow2d.userData.tip = new THREE.Vector3(ex, ey, 2.5);
+  }
+  stage2d.add(gradArrow2d);
+
+  // ── 3D surface: dot at (probe.x, probe.y, f(probe)) + rise/run triangle
+  if (probeMesh3d) { stage3d.remove(probeMesh3d); probeMesh3d.geometry.dispose(); probeMesh3d.material.dispose(); }
+  if (riseTri3d) { stage3d.remove(riseTri3d); riseTri3d.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const probeGeom = new THREE.SphereGeometry(Math.min(xb - xa, yb - ya) * 0.015, 12, 12);
+  const probeMat  = new THREE.MeshBasicMaterial({ color: 0xff8a3d });
+  probeMesh3d = new THREE.Mesh(probeGeom, probeMat);
+  probeMesh3d.position.set(probe.x, probe.y, fAt);
+  stage3d.add(probeMesh3d);
+
+  // small dx/dy/df triangle sitting on the surface at the probe
+  riseTri3d = new THREE.Group();
+  const step = Math.min(xb - xa, yb - ya) * 0.13;
+  const Ax = probe.x,        Ay = probe.y,        Az = fAt;          // base point
+  const Bx = probe.x + step, By = probe.y,        Bz = fAt;          // along +x at same z (run dx)
+  const Cx = probe.x + step, Cy = probe.y + step, Cz = fAt;          // along +y at same z (run dy)
+  const Dx = Cx,             Dy = Cy,             Dz = p.f(Cx, Cy);  // tip on surface above C (df rise)
+  const tubes = [
+    [[Ax, Ay, Az], [Bx, By, Bz], 0xffd166, 'dx'],
+    [[Bx, By, Bz], [Cx, Cy, Cz], 0xffd166, 'dy'],
+    [[Cx, Cy, Cz], [Dx, Dy, Dz], 0xff7eb6, 'df'],
+  ];
+  for (const [a, b, col] of tubes) {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a[0], a[1], a[2]),
+      new THREE.Vector3(b[0], b[1], b[2]),
+    ]);
+    riseTri3d.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: col })));
+  }
+  // also a thin dashed hypotenuse A → D, showing the surface-tangent direction
+  const hyp = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(Ax, Ay, Az), new THREE.Vector3(Dx, Dy, Dz),
+  ]);
+  const hypLine = new THREE.Line(hyp, new THREE.LineDashedMaterial({
+    color: 0xffd166, dashSize: step * 0.05, gapSize: step * 0.04, transparent: true, opacity: 0.55,
+  }));
+  hypLine.computeLineDistances();
+  riseTri3d.add(hypLine);
+  // store the midpoints so tick() can position the HTML labels
+  riseTri3d.userData = {
+    midDx: new THREE.Vector3((Ax + Bx) / 2, (Ay + By) / 2, (Az + Bz) / 2),
+    midDy: new THREE.Vector3((Bx + Cx) / 2, (By + Cy) / 2, (Bz + Cz) / 2),
+    midDf: new THREE.Vector3((Cx + Dx) / 2, (Cy + Dy) / 2, (Cz + Dz) / 2),
+  };
+  stage3d.add(riseTri3d);
+
+  // overlay text
+  document.getElementById('ovProbeXY').textContent = `(${probe.x.toFixed(2)}, ${probe.y.toFixed(2)})`;
+  document.getElementById('ovDfdx').textContent    = fx.toFixed(2);
+  document.getElementById('ovDfdy').textContent    = fy.toFixed(2);
+  document.getElementById('ovGmag').textContent    = gm.toFixed(2);
+}
+
+// =============================================================================
 // CAMERA FRAMING
 // =============================================================================
 function frame3DCamera([xa, xb], [ya, yb], [zMin, zMax]) {
@@ -722,7 +976,37 @@ function tick() {
   controls3d.update();
   renderer3d.render(scene3d, camera3d);
   renderer2d.render(scene2d, camera2d);
+  positionFloatingLabels();
   requestAnimationFrame(tick);
+}
+
+// Project a world point into screen-space within a given canvas/camera and
+// position an absolutely-positioned HTML label there. Hides the label if the
+// point is behind the camera.
+function placeLabel(lbl, canvas, cam, worldVec) {
+  if (!lbl) return;
+  const v = worldVec.clone().project(cam);
+  if (v.z < -1 || v.z > 1) { lbl.style.opacity = '0'; return; }
+  const rect = canvas.getBoundingClientRect();
+  const paneRect = canvas.parentElement.getBoundingClientRect();
+  const px = (v.x * 0.5 + 0.5) * rect.width  + (rect.left - paneRect.left);
+  const py = (-v.y * 0.5 + 0.5) * rect.height + (rect.top  - paneRect.top);
+  lbl.style.left = px + 'px';
+  lbl.style.top  = py + 'px';
+  lbl.style.opacity = '1';
+}
+
+function positionFloatingLabels() {
+  if (riseTri3d && riseTri3d.userData) {
+    placeLabel(document.getElementById('lblDx'), canvas3d, camera3d, riseTri3d.userData.midDx);
+    placeLabel(document.getElementById('lblDy'), canvas3d, camera3d, riseTri3d.userData.midDy);
+    placeLabel(document.getElementById('lblDf'), canvas3d, camera3d, riseTri3d.userData.midDf);
+  }
+  if (gradArrow2d && gradArrow2d.userData?.tip) {
+    placeLabel(document.getElementById('lblGrad'), canvas2d, camera2d, gradArrow2d.userData.tip);
+  } else {
+    document.getElementById('lblGrad').style.opacity = '0';
+  }
 }
 
 // =============================================================================
@@ -747,6 +1031,30 @@ document.getElementById('btnReset').addEventListener('click', () => {
   frame3DCamera(p.x, p.y, [sampled.zMin, sampled.zMax]);
 });
 document.getElementById('speedSel').addEventListener('change', e => { speed = +e.target.value; });
+
+// Probe dragging on the 2D map: pointer position → world (x, y) via the
+// orthographic camera's frustum.
+function setProbeFromPointer(ev) {
+  const rect = canvas2d.getBoundingClientRect();
+  const nx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  const ny = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+  // unproject through ortho camera
+  const v = new THREE.Vector3(nx, ny, 0).unproject(camera2d);
+  probe.x = v.x; probe.y = v.y;
+  updateProbe();
+}
+canvas2d.addEventListener('pointerdown', e => {
+  probe.dragging = true;
+  canvas2d.setPointerCapture(e.pointerId);
+  setProbeFromPointer(e);
+});
+canvas2d.addEventListener('pointermove', e => {
+  if (probe.dragging) setProbeFromPointer(e);
+});
+canvas2d.addEventListener('pointerup', e => {
+  probe.dragging = false;
+  try { canvas2d.releasePointerCapture(e.pointerId); } catch (_) {}
+});
 
 document.querySelectorAll('.presets button').forEach(b => {
   b.addEventListener('click', () => {
