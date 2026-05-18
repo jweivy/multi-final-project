@@ -597,12 +597,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // Single blue → purple ramp used for every preset's positive shells.
 // Inner (axis-side) shells use the deep navy end, outer shells use the
 // lavender end, so the stack reads as a smooth depth gradient.
-const POSITIVE_GRADIENT = [0x10204a, 0x6750d8, 0xd5cdff];
+const POSITIVE_GRADIENT = [0x1e1060, 0x3d28aa, 0x6750d8, 0x9270e0, 0xa888ee];
 
 // Red ramp for any shell with f(r) < 0 — the part of the integral that
 // subtracts from the total. Same red across all presets so the meaning
 // is consistent.
-const NEGATIVE_GRADIENT = [0x4a1010, 0xc02a2a, 0xff7070];
+const NEGATIVE_GRADIENT = [0x3a0a0a, 0x6e1515, 0xa82020, 0xc43535, 0xd04848];
 
 const PRESETS = {
   sqrt: {
@@ -751,17 +751,14 @@ function jsPretty(s) {
   return s;
 }
 
-// Sample a 3-stop gradient at parameter t ∈ [0, 1].
+// Sample an N-stop gradient at parameter t ∈ [0, 1].
 function gradientColor(stops, t) {
   t = Math.max(0, Math.min(1, t));
-  const [c0, c1, c2] = stops.map(h => new THREE.Color(h));
-  if (t <= 0.5) {
-    const u = t / 0.5;
-    return new THREE.Color().lerpColors(c0, c1, u);
-  } else {
-    const u = (t - 0.5) / 0.5;
-    return new THREE.Color().lerpColors(c1, c2, u);
-  }
+  const colors = stops.map(h => new THREE.Color(h));
+  const n = colors.length - 1;
+  const seg = Math.min(Math.floor(t * n), n - 1);
+  const u = (t * n) - seg;
+  return new THREE.Color().lerpColors(colors[seg], colors[seg + 1], u);
 }
 
 function trapVolume(f, a, b, n = 400) {
