@@ -228,6 +228,48 @@
         </div>
       </div>
     </a>
+
+    <a class="method-card" href="contour.html" aria-label="Open Contour Plots explorer">
+      <div class="frame" aria-hidden="true">
+        <svg viewBox="0 0 1280 800" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="surfGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ffd166" stop-opacity="0.55"/>
+              <stop offset="50%" stop-color="#6750d8" stop-opacity="0.45"/>
+              <stop offset="100%" stop-color="#10204a" stop-opacity="0.55"/>
+            </linearGradient>
+          </defs>
+          <rect width="1280" height="800" fill="#07090c"/>
+          <!-- left: faux surface (3 ellipses stacked) -->
+          <g transform="translate(320, 400)">
+            <ellipse cx="0" cy="80"  rx="240" ry="60"  fill="url(#surfGrad)" stroke="#6750d8" stroke-width="1.5" opacity="0.85"/>
+            <ellipse cx="0" cy="20"  rx="180" ry="48"  fill="url(#surfGrad)" stroke="#a187e6" stroke-width="1.5" opacity="0.85"/>
+            <ellipse cx="0" cy="-40" rx="120" ry="34"  fill="url(#surfGrad)" stroke="#d5cdff" stroke-width="1.5" opacity="0.9"/>
+            <ellipse cx="0" cy="-90" rx="60"  ry="18"  fill="url(#surfGrad)" stroke="#ffd166" stroke-width="2"   opacity="0.95"/>
+            <!-- cutting plane sliver -->
+            <ellipse cx="0" cy="20" rx="180" ry="48" fill="rgba(106,169,255,0.18)" stroke="#6aa9ff" stroke-width="2"/>
+          </g>
+          <!-- right: concentric contour map -->
+          <g transform="translate(950, 400)" fill="none" stroke-width="2.5">
+            <line x1="-220" y1="0" x2="220" y2="0" stroke="#3a414a" stroke-width="1.5"/>
+            <line x1="0" y1="-220" x2="0" y2="220" stroke="#3a414a" stroke-width="1.5"/>
+            <circle cx="0" cy="0" r="200" stroke="#6aa9ff" opacity="0.32"/>
+            <circle cx="0" cy="0" r="155" stroke="#6aa9ff" opacity="0.32"/>
+            <circle cx="0" cy="0" r="110" stroke="#ffd166"/>
+            <circle cx="0" cy="0" r="65"  stroke="#6aa9ff" opacity="0.32"/>
+            <circle cx="0" cy="0" r="22"  stroke="#6aa9ff" opacity="0.32"/>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>Contour <b>plots.</b></h2>
+        <div class="formula">f(x, y) = c → level curve</div>
+        <div class="open">
+          <span>Open</span>
+          <span class="arrow"></span>
+        </div>
+      </div>
+    </a>
   </div>
 </main>
 
