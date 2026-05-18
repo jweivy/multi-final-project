@@ -227,10 +227,12 @@
   </header>
 
   <div id="customForm">
-    <label>outer r(θ) =</label>
+    <label id="customOuterLabel">outer r(θ) =</label>
     <input id="customOuter" type="text" value="2*sin(t)^2" placeholder="e.g. 2 + 2cos(t)">
-    <label>inner r(θ) =</label>
-    <input id="customInner" type="text" value="0.5" placeholder="0 for single curve">
+    <span id="customInnerWrap" style="display: contents;">
+      <label>inner r(θ) =</label>
+      <input id="customInner" type="text" value="0.5" placeholder="0 for single curve">
+    </span>
     <label>θ ∈ [</label>
     <input id="customA" type="text" class="small" value="0">
     <label>,</label>
@@ -632,6 +634,24 @@ function hookControls() {
       if (e.key === 'Enter') applyCustom();
     });
   });
+  // When the user toggles between "between" and "single curve", hide the
+  // inner r(θ) input in single mode (one curve has no inner) and relabel
+  // the outer input simply as "r(θ) =".
+  document.getElementById('customMode').addEventListener('change', syncCustomModeUI);
+  syncCustomModeUI();
+}
+
+function syncCustomModeUI() {
+  const mode = document.getElementById('customMode').value;
+  const innerWrap = document.getElementById('customInnerWrap');
+  const outerLabel = document.getElementById('customOuterLabel');
+  if (mode === 'single') {
+    innerWrap.style.display = 'none';
+    outerLabel.textContent = 'r(θ) =';
+  } else {
+    innerWrap.style.display = 'contents';
+    outerLabel.textContent = 'outer r(θ) =';
+  }
 }
 
 function setActivePreset(key) {
