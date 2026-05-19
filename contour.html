@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contour Plots · 3D ↔ 2D Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin children explicitly. When #customForm is display:none, auto-placement
+     would shift the 1fr track onto footer, squashing scene-wrap to 1px. */
+  #app > header     { grid-row: 1; }
+  #app > #customForm{ grid-row: 2; }
+  #app > #scene-wrap{ grid-row: 3; min-height: 0; }
+  #app > footer     { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 180px;
+  }
+  #customForm input[type=text].small { width: 70px; }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  #scene-wrap { display: flex; flex-direction: row; min-height: 0; position: relative; }
+  .pane {
+    position: relative; flex: 1 1 0; min-width: 0; overflow: hidden;
+  }
+  .pane + .pane { border-left: 1px solid var(--pill-border); }
+  .pane canvas { display: block; width: 100% !important; height: 100% !important; }
+  .pane-label {
+    position: absolute; top: 14px; left: 16px;
+    color: var(--soft); font-size: 11px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.78);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 360px;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 18px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 12.5px; font-style: italic; margin-bottom: 4px; }
+  .overlay .formula .katex { font-size: 1.05em; }
+  .overlay .level {
+    color: var(--gold); font-size: 14px;
+    font-family: "Courier New", monospace;
+  }
+  .overlay .legend {
+    color: var(--soft); font-size: 11px; margin-top: 8px; line-height: 1.55;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+  /* Floating labels that follow points/edges in 3D and 2D scenes. */
+  .label3d, .label2d {
+    position: absolute;
+    background: rgba(14, 17, 22, 0.88);
+    color: var(--gold);
+    border: 1px solid rgba(255, 209, 102, 0.45);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-family: "Courier New", monospace;
+    font-style: italic;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    z-index: 5;
+  }
+  .label3d.df { color: #ff7eb6; border-color: rgba(255, 126, 182, 0.45); }
+  .probe-stats {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--pill-border);
+    color: var(--ink);
+    font-family: "Courier New", monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .probe-stats .row { display: flex; justify-content: space-between; gap: 14px; }
+  .probe-stats .val { color: var(--gold); }
+  .probe-stats .lbl-soft { color: var(--soft); font-style: italic; font-size: 10.5px; margin-bottom: 4px; }
+  #pane2d { cursor: crosshair; }
+
+  footer {
+    padding: 12px 24px; display: grid;
+    grid-template-columns: auto 1fr auto auto; gap: 14px;
+    align-items: center; border-top: 1px solid var(--pill-border);
+  }
+  footer .lbl { color: var(--soft); font-size: 13px; }
+  footer .lbl b { color: var(--ink); font-family: "Courier New", monospace; font-weight: normal; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 18px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 6px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+
+  @media (max-width: 900px) {
+    #scene-wrap { flex-direction: column; }
+    .pane + .pane { border-left: none; border-top: 1px solid var(--pill-border); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Contour Plots</b> · 3D ↔ 2D explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="paraboloid" class="active">paraboloid · x² + y²</button>
+      <button data-preset="saddle">saddle · x² − y²</button>
+      <button data-preset="ripple">ripple · sin(x² + y²)</button>
+      <button data-preset="hill">two hills</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>f(x, y) =</label>
+    <input id="customExpr" type="text" value="x^2 + y^2" placeholder="e.g. sin(x) + cos(y)">
+    <label>x ∈ [</label><input id="customXa" type="text" class="small" value="-2"><label>,</label><input id="customXb" type="text" class="small" value="2"><label>]</label>
+    <label>y ∈ [</label><input id="customYa" type="text" class="small" value="-2"><label>,</label><input id="customYb" type="text" class="small" value="2"><label>]</label>
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b> and <b>y</b> &nbsp;·&nbsp; functions: sin, cos, tan, sqrt, log, exp, abs &nbsp;·&nbsp; constants: pi, e &nbsp;·&nbsp; ^ for power</span>
+  </div>
+
+  <div id="scene-wrap">
+    <div class="pane" id="pane3d">
+      <canvas id="canvas3d"></canvas>
+      <div class="pane-label">3d surface · z = f(x, y)</div>
+      <div class="overlay">
+        <h2><b id="ovTitle">paraboloid</b></h2>
+        <div class="formula" id="ovFormula"></div>
+        <div class="level">cutting plane: <span id="ovLevel">0.00</span></div>
+        <div class="legend">
+          <div><span class="swatch" style="background: rgba(106, 169, 255, 0.5);"></span>cutting plane z = c</div>
+          <div><span class="swatch" style="background: var(--gold);"></span>contour where f(x, y) = c</div>
+          <div style="margin-top:4px; font-style:italic;">drag to rotate · scroll to zoom</div>
+        </div>
+        <div class="probe-stats">
+          <div class="lbl-soft">at probe (drag the orange dot on the map)</div>
+          <div class="row"><span>(x, y)</span><span class="val" id="ovProbeXY">(0.00, 0.00)</span></div>
+          <div class="row"><span>∂f/∂x</span><span class="val" id="ovDfdx">0.00</span></div>
+          <div class="row"><span>∂f/∂y</span><span class="val" id="ovDfdy">0.00</span></div>
+          <div class="row"><span>|∇f| = √(fx² + fy²)</span><span class="val" id="ovGmag">0.00</span></div>
+        </div>
+      </div>
+      <span class="label3d" id="lblDx">dx</span>
+      <span class="label3d" id="lblDy">dy</span>
+      <span class="label3d df" id="lblDf">df</span>
+    </div>
+    <div class="pane" id="pane2d">
+      <canvas id="canvas2d"></canvas>
+      <div class="pane-label">2d contour map · steep = lines crowd together</div>
+      <div class="overlay">
+        <h2 style="font-size:15px;">level set: <b id="ovLevel2">f(x, y) = 0.00</b></h2>
+        <div class="legend">
+          <div><span class="swatch" style="background: rgba(106, 169, 255, 0.35);"></span>other level lines</div>
+          <div><span class="swatch" style="background: var(--gold);"></span>current level (matches plane)</div>
+          <div><span class="swatch" style="background: linear-gradient(90deg, #1a1d22, #ff7eb6);"></span>steepness |∇f| · darker pink = steeper</div>
+          <div><span class="swatch" style="background: #ff8a3d;"></span>probe · drag me</div>
+          <div><span class="swatch" style="background: var(--gold); border-radius: 50%; height: 6px; margin-top: 2px;"></span>∇f points uphill, ⟂ to contour</div>
+        </div>
+      </div>
+      <span class="label2d" id="lblGrad">∇f</span>
+    </div>
+  </div>
+
+  <footer>
+    <span class="lbl">level <b id="lblLevel">c = 0.00</b></span>
+    <input type="range" id="levelSlider" min="0" max="1000" value="500">
+    <select class="speed-select" id="speedSel">
+      <option value="0.5">½×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+    </select>
+    <span style="display:flex; gap:8px;">
+      <button class="action" id="btnPlay">▶ sweep</button>
+      <button class="action ghost" id="btnReset">↺ reset view</button>
+    </span>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// =============================================================================
+// PARSER — accepts f(x, y) expressions
+// =============================================================================
+function compileF(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  // implicit multiplication: 2x → 2*x, 3sin(x) → 3*sin(x), (x+1)(y-1) → (x+1)*(y-1)
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  for (const [tx, ty] of [[0.5, 0.5], [-0.5, 1], [1, -1]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives a non-number at (x=${tx}, y=${ty})`);
+  }
+  return fn;
+}
+function compileConst(raw) {
+  const fn = compileF(String(raw));
+  return fn(0, 0);
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PI = Math.PI;
+const PRESETS = {
+  paraboloid: {
+    label: 'paraboloid',
+    latex: 'f(x, y) = x^2 + y^2',
+    f: (x, y) => x * x + y * y,
+    x: [-2, 2], y: [-2, 2],
+    levelHint: 'circles of radius √c',
+  },
+  saddle: {
+    label: 'saddle',
+    latex: 'f(x, y) = x^2 - y^2',
+    f: (x, y) => x * x - y * y,
+    x: [-2, 2], y: [-2, 2],
+    levelHint: 'hyperbolas x² − y² = c',
+  },
+  ripple: {
+    label: 'ripple',
+    latex: 'f(x, y) = \\sin(x^2 + y^2)',
+    f: (x, y) => Math.sin(x * x + y * y),
+    x: [-2.5, 2.5], y: [-2.5, 2.5],
+    levelHint: 'oscillating concentric rings',
+  },
+  hill: {
+    label: 'two hills',
+    latex: 'f(x, y) = e^{-((x-1)^2 + y^2)} + e^{-((x+1)^2 + y^2)}',
+    f: (x, y) => Math.exp(-((x - 1) ** 2 + y * y)) + Math.exp(-((x + 1) ** 2 + y * y)),
+    x: [-3, 3], y: [-2, 2],
+    levelHint: 'figure-eight at the saddle level',
+  },
+  custom: {
+    label: 'custom',
+    latex: 'f(x, y) = x^2 + y^2',
+    f: (x, y) => x * x + y * y,
+    x: [-2, 2], y: [-2, 2],
+    levelHint: '',
+  },
+};
+let activePresetKey = 'paraboloid';
+
+// =============================================================================
+// MATH HELPERS
+// =============================================================================
+// Marching-squares: given a sampled grid of f at (xi, yj) and a threshold c,
+// return an array of line segments [x0, y0, x1, y1, …] in world coordinates
+// (the xy-plane). Uses the 16-case lookup; saddle ambiguity (cases 5/10) is
+// resolved by the cell's center sample so the curves connect the "right" way.
+function marchingSquares(grid, c, xs, ys) {
+  const segs = [];
+  const nx = xs.length, ny = ys.length;
+  for (let j = 0; j < ny - 1; j++) {
+    for (let i = 0; i < nx - 1; i++) {
+      const v00 = grid[j][i],     v10 = grid[j][i + 1];
+      const v01 = grid[j + 1][i], v11 = grid[j + 1][i + 1];
+      const x0 = xs[i], x1 = xs[i + 1];
+      const y0 = ys[j], y1 = ys[j + 1];
+      // edge midpoints by linear interp on f
+      const ipx = (vA, vB, xA, xB) => xA + (c - vA) * (xB - xA) / (vB - vA);
+      const ipy = (vA, vB, yA, yB) => yA + (c - vA) * (yB - yA) / (vB - vA);
+      let code = 0;
+      if (v00 > c) code |= 1;
+      if (v10 > c) code |= 2;
+      if (v11 > c) code |= 4;
+      if (v01 > c) code |= 8;
+      // edge points: bottom (b), right (r), top (t), left (l)
+      let b, r, t, l;
+      if (code === 0 || code === 15) continue;
+      if ((code & 1) !== ((code & 2) >> 1)) b = [ipx(v00, v10, x0, x1), y0];
+      if ((code & 2) !== ((code & 4) >> 1)) r = [x1, ipy(v10, v11, y0, y1)];
+      if ((code & 8) !== ((code & 4) >> 2)) t = [ipx(v01, v11, x0, x1), y1];
+      if ((code & 1) !== ((code & 8) >> 3)) l = [x0, ipy(v00, v01, y0, y1)];
+      const push = (p, q) => segs.push(p[0], p[1], q[0], q[1]);
+      switch (code) {
+        case 1: case 14: push(l, b); break;
+        case 2: case 13: push(b, r); break;
+        case 3: case 12: push(l, r); break;
+        case 4: case 11: push(t, r); break;
+        case 6: case 9:  push(b, t); break;
+        case 7: case 8:  push(l, t); break;
+        case 5: {
+          // ambiguous; sample cell center to decide
+          const xc = (x0 + x1) / 2, yc = (y0 + y1) / 2;
+          const vc = (v00 + v10 + v01 + v11) / 4;
+          if (vc > c) { push(l, t); push(b, r); }
+          else        { push(l, b); push(t, r); }
+          break;
+        }
+        case 10: {
+          const vc = (v00 + v10 + v01 + v11) / 4;
+          if (vc > c) { push(l, b); push(t, r); }
+          else        { push(l, t); push(b, r); }
+          break;
+        }
+      }
+    }
+  }
+  return segs;
+}
+
+// Sample f on an Nx × Ny grid over [xa, xb] × [ya, yb], plus |∇f| via central
+// differences — the gradient-magnitude grid is what drives the steepness
+// heatmap and feeds the probe's ∂f/∂x, ∂f/∂y readouts.
+function sampleGrid(f, xa, xb, ya, yb, Nx, Ny) {
+  const xs = new Float64Array(Nx), ys = new Float64Array(Ny);
+  for (let i = 0; i < Nx; i++) xs[i] = xa + (xb - xa) * i / (Nx - 1);
+  for (let j = 0; j < Ny; j++) ys[j] = ya + (yb - ya) * j / (Ny - 1);
+  const grid = new Array(Ny);
+  let zMin = Infinity, zMax = -Infinity;
+  for (let j = 0; j < Ny; j++) {
+    const row = new Float64Array(Nx);
+    for (let i = 0; i < Nx; i++) {
+      const v = f(xs[i], ys[j]);
+      row[i] = isFinite(v) ? v : 0;
+      if (row[i] < zMin) zMin = row[i];
+      if (row[i] > zMax) zMax = row[i];
+    }
+    grid[j] = row;
+  }
+  // |∇f| via central differences (forward/backward at edges)
+  const gradMag = new Array(Ny);
+  let gMax = 0;
+  for (let j = 0; j < Ny; j++) {
+    gradMag[j] = new Float64Array(Nx);
+    for (let i = 0; i < Nx; i++) {
+      const i0 = Math.max(0, i - 1), i1 = Math.min(Nx - 1, i + 1);
+      const j0 = Math.max(0, j - 1), j1 = Math.min(Ny - 1, j + 1);
+      const dfdx = (grid[j][i1] - grid[j][i0]) / Math.max(1e-9, xs[i1] - xs[i0]);
+      const dfdy = (grid[j1][i] - grid[j0][i]) / Math.max(1e-9, ys[j1] - ys[j0]);
+      const m = Math.sqrt(dfdx * dfdx + dfdy * dfdy);
+      gradMag[j][i] = m;
+      if (m > gMax) gMax = m;
+    }
+  }
+  return { xs, ys, grid, zMin, zMax, gradMag, gMax };
+}
+
+// Bilinear interpolation on a sampled grid at world (x, y).
+function bilerp(grid, xs, ys, x, y) {
+  const Nx = xs.length, Ny = ys.length;
+  const dx = xs[1] - xs[0], dy = ys[1] - ys[0];
+  let i = Math.floor((x - xs[0]) / dx);
+  let j = Math.floor((y - ys[0]) / dy);
+  i = Math.max(0, Math.min(Nx - 2, i));
+  j = Math.max(0, Math.min(Ny - 2, j));
+  const u = (x - xs[i]) / dx;
+  const v = (y - ys[j]) / dy;
+  const v00 = grid[j][i], v10 = grid[j][i + 1];
+  const v01 = grid[j + 1][i], v11 = grid[j + 1][i + 1];
+  return (1 - u) * (1 - v) * v00 + u * (1 - v) * v10 + (1 - u) * v * v01 + u * v * v11;
+}
+
+// ∂f/∂x and ∂f/∂y at world (x, y) via central differences on the analytic f.
+function partials(f, x, y, h) {
+  return {
+    fx: (f(x + h, y) - f(x - h, y)) / (2 * h),
+    fy: (f(x, y + h) - f(x, y - h)) / (2 * h),
+  };
+}
+
+// =============================================================================
+// COLOR GRADIENT (height → color)
+// =============================================================================
+const GRADIENT = ['#10204a', '#3a3f9d', '#6750d8', '#c876b2', '#ffd166'];
+function gradColor(t) {
+  // t ∈ [0, 1]
+  t = Math.max(0, Math.min(1, t));
+  const seg = t * (GRADIENT.length - 1);
+  const i = Math.min(GRADIENT.length - 2, Math.floor(seg));
+  const f = seg - i;
+  const a = new THREE.Color(GRADIENT[i]);
+  const b = new THREE.Color(GRADIENT[i + 1]);
+  return new THREE.Color().lerpColors(a, b, f);
+}
+
+// =============================================================================
+// THREE.JS SETUP — 3D (perspective) and 2D (orthographic)
+// =============================================================================
+// 3D scene
+const canvas3d = document.getElementById('canvas3d');
+const renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer3d.setPixelRatio(window.devicePixelRatio);
+const scene3d = new THREE.Scene();
+scene3d.background = new THREE.Color(0x0e1116);
+const camera3d = new THREE.PerspectiveCamera(40, 1, 0.01, 200);
+camera3d.up.set(0, 0, 1);
+camera3d.position.set(4.5, -5.5, 4.5);
+const controls3d = new OrbitControls(camera3d, canvas3d);
+controls3d.enableDamping = true;
+controls3d.dampingFactor = 0.08;
+scene3d.add(new THREE.HemisphereLight(0xeaf2ff, 0x1a1f28, 0.9));
+scene3d.add(new THREE.AmbientLight(0xffffff, 0.25));
+const camLight = new THREE.DirectionalLight(0xffffff, 0.6);
+camLight.position.set(0.3, 0.5, 1);
+camera3d.add(camLight);
+scene3d.add(camera3d);
+
+// 2D scene
+const canvas2d = document.getElementById('canvas2d');
+const renderer2d = new THREE.WebGLRenderer({ canvas: canvas2d, antialias: true });
+renderer2d.setPixelRatio(window.devicePixelRatio);
+const scene2d = new THREE.Scene();
+scene2d.background = new THREE.Color(0x0e1116);
+const camera2d = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
+camera2d.position.set(0, 0, 5);
+camera2d.lookAt(0, 0, 0);
+
+// stage groups so we can swap geometry per rebuild
+const stage3d = new THREE.Group(); scene3d.add(stage3d);
+const stage2d = new THREE.Group(); scene2d.add(stage2d);
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const o = g.children.pop();
+    o.traverse?.(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
+}
+
+// =============================================================================
+// STATE
+// =============================================================================
+let sampled = null;     // { xs, ys, grid, zMin, zMax, gradMag, gMax }
+let cuttingLevel = 0;   // current z = c
+let playing = false;
+let sweepDir = 1;
+let speed = 1;
+let lastTime = 0;
+let cuttingMesh = null;
+let highlightLine3d = null;
+let highlightLine2d = null;
+// Probe — the user drags this on the 2D map; it shows ∂f/∂x, ∂f/∂y, |∇f|.
+let probe = { x: 0, y: 0, dragging: false };
+let probeMesh2d = null;     // orange dot on the 2D map
+let probeMesh3d = null;     // orange dot on the 3D surface
+let gradArrow2d = null;     // gradient vector on the 2D map
+let riseTri3d = null;       // dx/dy/df triangle on the 3D surface
+let heatmapMesh = null;     // |∇f| color underneath the 2D contours
+
+// =============================================================================
+// BUILD SCENES
+// =============================================================================
+function rebuild() {
+  disposeGroup(stage3d);
+  disposeGroup(stage2d);
+  const p = PRESETS[activePresetKey];
+  const [xa, xb] = p.x;
+  const [ya, yb] = p.y;
+  sampled = sampleGrid(p.f, xa, xb, ya, yb, 100, 100);
+
+  build3DSurface(sampled, [xa, xb], [ya, yb]);
+  build2DBaseContours(sampled, [xa, xb], [ya, yb]);
+
+  // initial cutting level: middle of range
+  cuttingLevel = (sampled.zMin + sampled.zMax) / 2;
+  // sync slider
+  document.getElementById('levelSlider').value = 500;
+  updateCuttingPlane();
+  // place probe at the center by default
+  probe.x = (xa + xb) / 2;
+  probe.y = (ya + yb) / 2;
+  updateProbe();
+  frame3DCamera([xa, xb], [ya, yb], [sampled.zMin, sampled.zMax]);
+  fit2DCamera([xa, xb], [ya, yb]);
+  renderOverlay(p);
+}
+
+function build3DSurface({ xs, ys, grid, zMin, zMax }, [xa, xb], [ya, yb]) {
+  const Nx = xs.length, Ny = ys.length;
+  const geom = new THREE.BufferGeometry();
+  const positions = new Float32Array(Nx * Ny * 3);
+  const colors = new Float32Array(Nx * Ny * 3);
+  const indices = [];
+  const zSpan = Math.max(1e-9, zMax - zMin);
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const k = (j * Nx + i) * 3;
+      positions[k]     = xs[i];
+      positions[k + 1] = ys[j];
+      positions[k + 2] = grid[j][i];
+      const c = gradColor((grid[j][i] - zMin) / zSpan);
+      colors[k]     = c.r;
+      colors[k + 1] = c.g;
+      colors[k + 2] = c.b;
+    }
+  }
+  for (let j = 0; j < Ny - 1; j++) {
+    for (let i = 0; i < Nx - 1; i++) {
+      const a = j * Nx + i, b = a + 1, c = a + Nx, d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.7, metalness: 0.05,
+    side: THREE.DoubleSide, flatShading: false,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  stage3d.add(mesh);
+
+  // wireframe overlay (faint)
+  const wfMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 });
+  const wf = new THREE.LineSegments(new THREE.WireframeGeometry(geom), wfMat);
+  stage3d.add(wf);
+
+  // axes (3D)
+  const axesMat = new THREE.LineBasicMaterial({ color: 0x3a414a });
+  const axesGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(xa, 0, zMin), new THREE.Vector3(xb, 0, zMin),
+    new THREE.Vector3(0, ya, zMin), new THREE.Vector3(0, yb, zMin),
+    new THREE.Vector3(0, 0, zMin), new THREE.Vector3(0, 0, zMax),
+  ]);
+  stage3d.add(new THREE.LineSegments(axesGeom, axesMat));
+
+  // cutting plane (semi-transparent)
+  const planeGeom = new THREE.PlaneGeometry(xb - xa, yb - ya);
+  const planeMat = new THREE.MeshBasicMaterial({
+    color: 0x6aa9ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  cuttingMesh = new THREE.Mesh(planeGeom, planeMat);
+  cuttingMesh.position.set((xa + xb) / 2, (ya + yb) / 2, 0);
+  stage3d.add(cuttingMesh);
+
+  // placeholder for highlight contour line (set in updateCuttingPlane)
+  highlightLine3d = new THREE.Group();
+  stage3d.add(highlightLine3d);
+}
+
+function build2DBaseContours({ xs, ys, grid, zMin, zMax, gradMag, gMax }, [xa, xb], [ya, yb]) {
+  // Light background tint for orientation
+  const bgGeom = new THREE.PlaneGeometry(xb - xa, yb - ya);
+  const bgMat = new THREE.MeshBasicMaterial({ color: 0x12161d });
+  const bg = new THREE.Mesh(bgGeom, bgMat);
+  bg.position.set((xa + xb) / 2, (ya + yb) / 2, -1);
+  stage2d.add(bg);
+
+  // |∇f| heatmap: a per-vertex-colored plane underneath the contours.
+  // Pink intensity ∝ steepness, so steep regions (where contours crowd
+  // together) read visibly darker on the map. This is the visual hook for
+  // "close lines ⇔ big |∇f|".
+  buildHeatmap(xs, ys, gradMag, gMax);
+
+  // grid lines
+  const gridStep = 0.5;
+  const gridMat = new THREE.LineBasicMaterial({ color: 0x1a1d22 });
+  const gridPts = [];
+  for (let x = Math.ceil(xa / gridStep) * gridStep; x <= xb; x += gridStep) {
+    gridPts.push(new THREE.Vector3(x, ya, 0), new THREE.Vector3(x, yb, 0));
+  }
+  for (let y = Math.ceil(ya / gridStep) * gridStep; y <= yb; y += gridStep) {
+    gridPts.push(new THREE.Vector3(xa, y, 0), new THREE.Vector3(xb, y, 0));
+  }
+  stage2d.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPts), gridMat));
+
+  // axes
+  const axisMat = new THREE.LineBasicMaterial({ color: 0x3a414a });
+  stage2d.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(xa, 0, 0.5), new THREE.Vector3(xb, 0, 0.5),
+    new THREE.Vector3(0, ya, 0.5), new THREE.Vector3(0, yb, 0.5),
+  ]), axisMat));
+
+  // Background level set (faint blue) — 11 levels evenly across zMin..zMax
+  const NLEVELS = 11;
+  const baseMat = new THREE.LineBasicMaterial({ color: 0x6aa9ff, transparent: true, opacity: 0.32 });
+  const allPts = [];
+  for (let k = 0; k < NLEVELS; k++) {
+    const c = zMin + (zMax - zMin) * (k + 0.5) / NLEVELS;
+    const segs = marchingSquares(grid, c, xs, ys);
+    for (let s = 0; s < segs.length; s += 4) {
+      allPts.push(new THREE.Vector3(segs[s], segs[s + 1], 1));
+      allPts.push(new THREE.Vector3(segs[s + 2], segs[s + 3], 1));
+    }
+  }
+  stage2d.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(allPts), baseMat));
+
+  // placeholder for highlighted current level — populated in updateCuttingPlane
+  highlightLine2d = new THREE.Group();
+  stage2d.add(highlightLine2d);
+}
+
+function updateCuttingPlane() {
+  if (!sampled || !cuttingMesh) return;
+  // move plane
+  cuttingMesh.position.z = cuttingLevel;
+  // rebuild highlight contour at z = cuttingLevel
+  disposeGroup(highlightLine3d);
+  disposeGroup(highlightLine2d);
+  const p = PRESETS[activePresetKey];
+  const segs = marchingSquares(sampled.grid, cuttingLevel, sampled.xs, sampled.ys);
+  // 3D: draw at z = cuttingLevel as bright gold lines, slightly above the plane
+  const pts3 = [];
+  for (let s = 0; s < segs.length; s += 4) {
+    pts3.push(new THREE.Vector3(segs[s], segs[s + 1], cuttingLevel + 0.001));
+    pts3.push(new THREE.Vector3(segs[s + 2], segs[s + 3], cuttingLevel + 0.001));
+  }
+  const matGold3 = new THREE.LineBasicMaterial({ color: 0xffd166 });
+  highlightLine3d.add(new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pts3), matGold3
+  ));
+  // 2D: same contour at z=2 so it draws over the base contours
+  const pts2 = [];
+  for (let s = 0; s < segs.length; s += 4) {
+    pts2.push(new THREE.Vector3(segs[s], segs[s + 1], 2));
+    pts2.push(new THREE.Vector3(segs[s + 2], segs[s + 3], 2));
+  }
+  const matGold2 = new THREE.LineBasicMaterial({ color: 0xffd166, linewidth: 2 });
+  highlightLine2d.add(new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pts2), matGold2
+  ));
+
+  // overlay text
+  const lvl = cuttingLevel.toFixed(2);
+  document.getElementById('ovLevel').textContent = lvl;
+  document.getElementById('ovLevel2').textContent = `f(x, y) = ${lvl}`;
+  document.getElementById('lblLevel').textContent = `c = ${lvl}`;
+}
+
+function renderOverlay(p) {
+  document.getElementById('ovTitle').textContent = p.label;
+  if (window.katex) {
+    try {
+      katex.render(p.latex, document.getElementById('ovFormula'), { throwOnError: false });
+    } catch (e) { document.getElementById('ovFormula').textContent = p.latex; }
+  } else {
+    document.getElementById('ovFormula').textContent = p.latex;
+  }
+}
+
+// =============================================================================
+// HEATMAP — |∇f| color underneath the 2D contour lines
+// =============================================================================
+function buildHeatmap(xs, ys, gradMag, gMax) {
+  const Nx = xs.length, Ny = ys.length;
+  const positions = new Float32Array(Nx * Ny * 3);
+  const colors = new Float32Array(Nx * Ny * 3);
+  // base + steep colors
+  const baseCol = new THREE.Color(0x12161d);
+  const steepCol = new THREE.Color(0xff7eb6);  // pink for steep
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const k = (j * Nx + i) * 3;
+      positions[k]     = xs[i];
+      positions[k + 1] = ys[j];
+      positions[k + 2] = -0.5;
+      const t = gMax > 1e-9 ? Math.min(1, gradMag[j][i] / gMax) : 0;
+      const c = new THREE.Color().lerpColors(baseCol, steepCol, t * 0.85);
+      colors[k] = c.r; colors[k + 1] = c.g; colors[k + 2] = c.b;
+    }
+  }
+  const indices = [];
+  for (let j = 0; j < Ny - 1; j++) {
+    for (let i = 0; i < Nx - 1; i++) {
+      const a = j * Nx + i, b = a + 1, c = a + Nx, d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setIndex(indices);
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  heatmapMesh = new THREE.Mesh(geom, mat);
+  stage2d.add(heatmapMesh);
+}
+
+// =============================================================================
+// PROBE — draggable point on 2D map; drives ∂f/∂x, ∂f/∂y, ∇f arrow, and the
+// dx/dy/df triangle on the 3D surface.
+// =============================================================================
+function updateProbe() {
+  if (!sampled) return;
+  const p = PRESETS[activePresetKey];
+  const [xa, xb] = p.x, [ya, yb] = p.y;
+  probe.x = Math.max(xa, Math.min(xb, probe.x));
+  probe.y = Math.max(ya, Math.min(yb, probe.y));
+
+  // partials via central differences on the analytic f
+  const hx = (xb - xa) * 0.005;
+  const hy = (yb - ya) * 0.005;
+  const fx = (p.f(probe.x + hx, probe.y) - p.f(probe.x - hx, probe.y)) / (2 * hx);
+  const fy = (p.f(probe.x, probe.y + hy) - p.f(probe.x, probe.y - hy)) / (2 * hy);
+  const gm = Math.sqrt(fx * fx + fy * fy);
+  const fAt = p.f(probe.x, probe.y);
+
+  // ── 2D map: orange dot + gradient arrow
+  if (probeMesh2d) { stage2d.remove(probeMesh2d); probeMesh2d.geometry.dispose(); probeMesh2d.material.dispose(); }
+  if (gradArrow2d) { stage2d.remove(gradArrow2d); gradArrow2d.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const dotGeom = new THREE.CircleGeometry(Math.min(xb - xa, yb - ya) * 0.013, 24);
+  const dotMat  = new THREE.MeshBasicMaterial({ color: 0xff8a3d });
+  probeMesh2d = new THREE.Mesh(dotGeom, dotMat);
+  probeMesh2d.position.set(probe.x, probe.y, 3);
+  stage2d.add(probeMesh2d);
+
+  // gradient arrow on 2D — direction = (fx, fy), normalized; length scales with |∇f|/gMax
+  gradArrow2d = new THREE.Group();
+  if (gm > 1e-6) {
+    const span = Math.min(xb - xa, yb - ya);
+    const len = Math.max(span * 0.10, span * 0.30 * (gm / Math.max(1e-9, sampled.gMax)));
+    const ux = fx / gm, uy = fy / gm;
+    const ex = probe.x + ux * len, ey = probe.y + uy * len;
+    const shaft = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(probe.x, probe.y, 2.5),
+        new THREE.Vector3(ex, ey, 2.5)
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xffd166, linewidth: 2 })
+    );
+    gradArrow2d.add(shaft);
+    // arrow head: two short lines off the tip
+    const headLen = len * 0.22;
+    const cosA = Math.cos(2.7), sinA = Math.sin(2.7);  // ~155°
+    const cosB = Math.cos(-2.7), sinB = Math.sin(-2.7);
+    const h1x = ex + (ux * cosA - uy * sinA) * headLen;
+    const h1y = ey + (ux * sinA + uy * cosA) * headLen;
+    const h2x = ex + (ux * cosB - uy * sinB) * headLen;
+    const h2y = ey + (ux * sinB + uy * cosB) * headLen;
+    const head = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(ex, ey, 2.5), new THREE.Vector3(h1x, h1y, 2.5),
+        new THREE.Vector3(ex, ey, 2.5), new THREE.Vector3(h2x, h2y, 2.5),
+      ]),
+      new THREE.LineBasicMaterial({ color: 0xffd166 })
+    );
+    gradArrow2d.add(head);
+    gradArrow2d.userData.tip = new THREE.Vector3(ex, ey, 2.5);
+  }
+  stage2d.add(gradArrow2d);
+
+  // ── 3D surface: dot at (probe.x, probe.y, f(probe)) + rise/run triangle
+  if (probeMesh3d) { stage3d.remove(probeMesh3d); probeMesh3d.geometry.dispose(); probeMesh3d.material.dispose(); }
+  if (riseTri3d) { stage3d.remove(riseTri3d); riseTri3d.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const probeGeom = new THREE.SphereGeometry(Math.min(xb - xa, yb - ya) * 0.015, 12, 12);
+  const probeMat  = new THREE.MeshBasicMaterial({ color: 0xff8a3d });
+  probeMesh3d = new THREE.Mesh(probeGeom, probeMat);
+  probeMesh3d.position.set(probe.x, probe.y, fAt);
+  stage3d.add(probeMesh3d);
+
+  // small dx/dy/df triangle sitting on the surface at the probe
+  riseTri3d = new THREE.Group();
+  const step = Math.min(xb - xa, yb - ya) * 0.13;
+  const Ax = probe.x,        Ay = probe.y,        Az = fAt;          // base point
+  const Bx = probe.x + step, By = probe.y,        Bz = fAt;          // along +x at same z (run dx)
+  const Cx = probe.x + step, Cy = probe.y + step, Cz = fAt;          // along +y at same z (run dy)
+  const Dx = Cx,             Dy = Cy,             Dz = p.f(Cx, Cy);  // tip on surface above C (df rise)
+  const tubes = [
+    [[Ax, Ay, Az], [Bx, By, Bz], 0xffd166, 'dx'],
+    [[Bx, By, Bz], [Cx, Cy, Cz], 0xffd166, 'dy'],
+    [[Cx, Cy, Cz], [Dx, Dy, Dz], 0xff7eb6, 'df'],
+  ];
+  for (const [a, b, col] of tubes) {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a[0], a[1], a[2]),
+      new THREE.Vector3(b[0], b[1], b[2]),
+    ]);
+    riseTri3d.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: col })));
+  }
+  // also a thin dashed hypotenuse A → D, showing the surface-tangent direction
+  const hyp = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(Ax, Ay, Az), new THREE.Vector3(Dx, Dy, Dz),
+  ]);
+  const hypLine = new THREE.Line(hyp, new THREE.LineDashedMaterial({
+    color: 0xffd166, dashSize: step * 0.05, gapSize: step * 0.04, transparent: true, opacity: 0.55,
+  }));
+  hypLine.computeLineDistances();
+  riseTri3d.add(hypLine);
+  // store the midpoints so tick() can position the HTML labels
+  riseTri3d.userData = {
+    midDx: new THREE.Vector3((Ax + Bx) / 2, (Ay + By) / 2, (Az + Bz) / 2),
+    midDy: new THREE.Vector3((Bx + Cx) / 2, (By + Cy) / 2, (Bz + Cz) / 2),
+    midDf: new THREE.Vector3((Cx + Dx) / 2, (Cy + Dy) / 2, (Cz + Dz) / 2),
+  };
+  stage3d.add(riseTri3d);
+
+  // overlay text
+  document.getElementById('ovProbeXY').textContent = `(${probe.x.toFixed(2)}, ${probe.y.toFixed(2)})`;
+  document.getElementById('ovDfdx').textContent    = fx.toFixed(2);
+  document.getElementById('ovDfdy').textContent    = fy.toFixed(2);
+  document.getElementById('ovGmag').textContent    = gm.toFixed(2);
+}
+
+// =============================================================================
+// CAMERA FRAMING
+// =============================================================================
+function frame3DCamera([xa, xb], [ya, yb], [zMin, zMax]) {
+  const cx = (xa + xb) / 2, cy = (ya + yb) / 2, cz = (zMin + zMax) / 2;
+  controls3d.target.set(cx, cy, cz);
+  const reach = Math.max(xb - xa, yb - ya, zMax - zMin);
+  camera3d.position.set(cx + reach * 1.3, cy - reach * 1.4, cz + reach * 1.1);
+  camera3d.near = reach * 0.01;
+  camera3d.far  = reach * 20;
+  camera3d.updateProjectionMatrix();
+  camera3d.lookAt(controls3d.target);
+  controls3d.update();
+}
+function fit2DCamera([xa, xb], [ya, yb]) {
+  const cx = (xa + xb) / 2, cy = (ya + yb) / 2;
+  camera2d.position.set(cx, cy, 5);
+  camera2d.lookAt(cx, cy, 0);
+  resize();
+}
+
+// =============================================================================
+// RESIZE / LOOP
+// =============================================================================
+function resize() {
+  for (const [canvas, renderer, cam, isOrtho, dom] of [
+    [canvas3d, renderer3d, camera3d, false, document.getElementById('pane3d')],
+    [canvas2d, renderer2d, camera2d, true,  document.getElementById('pane2d')],
+  ]) {
+    const w = Math.max(120, dom.clientWidth);
+    const h = Math.max(120, dom.clientHeight);
+    renderer.setSize(w, h, false);
+    if (isOrtho) {
+      const aspect = w / h;
+      const p = PRESETS[activePresetKey];
+      const [xa, xb] = p.x, [ya, yb] = p.y;
+      const sx = (xb - xa) / 2 * 1.06, sy = (yb - ya) / 2 * 1.06;
+      const useH = Math.max(sy, sx / aspect);
+      cam.left = -useH * aspect; cam.right = useH * aspect;
+      cam.top = useH; cam.bottom = -useH;
+      cam.updateProjectionMatrix();
+    } else {
+      cam.aspect = w / h;
+      cam.updateProjectionMatrix();
+    }
+  }
+}
+window.addEventListener('resize', resize);
+
+function tick() {
+  // advance sweep if playing
+  if (playing) {
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    if (sampled) {
+      const span = sampled.zMax - sampled.zMin;
+      cuttingLevel += sweepDir * dt * speed * span * 0.3;
+      if (cuttingLevel > sampled.zMax) { cuttingLevel = sampled.zMax; sweepDir = -1; }
+      if (cuttingLevel < sampled.zMin) { cuttingLevel = sampled.zMin; sweepDir = 1; }
+      const pct = (cuttingLevel - sampled.zMin) / Math.max(1e-9, span);
+      document.getElementById('levelSlider').value = Math.round(pct * 1000);
+      updateCuttingPlane();
+    }
+  }
+  controls3d.update();
+  renderer3d.render(scene3d, camera3d);
+  renderer2d.render(scene2d, camera2d);
+  positionFloatingLabels();
+  requestAnimationFrame(tick);
+}
+
+// Project a world point into screen-space within a given canvas/camera and
+// position an absolutely-positioned HTML label there. Hides the label if the
+// point is behind the camera.
+function placeLabel(lbl, canvas, cam, worldVec) {
+  if (!lbl) return;
+  const v = worldVec.clone().project(cam);
+  if (v.z < -1 || v.z > 1) { lbl.style.opacity = '0'; return; }
+  const rect = canvas.getBoundingClientRect();
+  const paneRect = canvas.parentElement.getBoundingClientRect();
+  const px = (v.x * 0.5 + 0.5) * rect.width  + (rect.left - paneRect.left);
+  const py = (-v.y * 0.5 + 0.5) * rect.height + (rect.top  - paneRect.top);
+  lbl.style.left = px + 'px';
+  lbl.style.top  = py + 'px';
+  lbl.style.opacity = '1';
+}
+
+function positionFloatingLabels() {
+  if (riseTri3d && riseTri3d.userData) {
+    placeLabel(document.getElementById('lblDx'), canvas3d, camera3d, riseTri3d.userData.midDx);
+    placeLabel(document.getElementById('lblDy'), canvas3d, camera3d, riseTri3d.userData.midDy);
+    placeLabel(document.getElementById('lblDf'), canvas3d, camera3d, riseTri3d.userData.midDf);
+  }
+  if (gradArrow2d && gradArrow2d.userData?.tip) {
+    placeLabel(document.getElementById('lblGrad'), canvas2d, camera2d, gradArrow2d.userData.tip);
+  } else {
+    document.getElementById('lblGrad').style.opacity = '0';
+  }
+}
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+const slider = document.getElementById('levelSlider');
+slider.addEventListener('input', e => {
+  if (!sampled) return;
+  const pct = +e.target.value / 1000;
+  cuttingLevel = sampled.zMin + pct * (sampled.zMax - sampled.zMin);
+  playing = false;
+  document.getElementById('btnPlay').textContent = '▶ sweep';
+  updateCuttingPlane();
+});
+document.getElementById('btnPlay').addEventListener('click', () => {
+  playing = !playing;
+  if (playing) lastTime = performance.now();
+  document.getElementById('btnPlay').textContent = playing ? '⏸ pause' : '▶ sweep';
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  const p = PRESETS[activePresetKey];
+  frame3DCamera(p.x, p.y, [sampled.zMin, sampled.zMax]);
+});
+document.getElementById('speedSel').addEventListener('change', e => { speed = +e.target.value; });
+
+// Probe dragging on the 2D map: pointer position → world (x, y) via the
+// orthographic camera's frustum.
+function setProbeFromPointer(ev) {
+  const rect = canvas2d.getBoundingClientRect();
+  const nx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  const ny = -(((ev.clientY - rect.top) / rect.height) * 2 - 1);
+  // unproject through ortho camera
+  const v = new THREE.Vector3(nx, ny, 0).unproject(camera2d);
+  probe.x = v.x; probe.y = v.y;
+  updateProbe();
+}
+canvas2d.addEventListener('pointerdown', e => {
+  probe.dragging = true;
+  canvas2d.setPointerCapture(e.pointerId);
+  setProbeFromPointer(e);
+});
+canvas2d.addEventListener('pointermove', e => {
+  if (probe.dragging) setProbeFromPointer(e);
+});
+canvas2d.addEventListener('pointerup', e => {
+  probe.dragging = false;
+  try { canvas2d.releasePointerCapture(e.pointerId); } catch (_) {}
+});
+
+document.querySelectorAll('.presets button').forEach(b => {
+  b.addEventListener('click', () => {
+    activePresetKey = b.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(x => x.classList.toggle('active', x === b));
+    document.getElementById('customForm').classList.toggle('shown', activePresetKey === 'custom');
+    rebuild();
+  });
+});
+
+document.getElementById('customApply').addEventListener('click', applyCustom);
+['customExpr', 'customXa', 'customXb', 'customYa', 'customYb'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyCustom();
+  });
+});
+
+function applyCustom() {
+  const err = document.getElementById('customError');
+  err.textContent = '';
+  let f, xa, xb, ya, yb;
+  try { f = compileF(document.getElementById('customExpr').value); }
+  catch (e) { err.textContent = 'f: ' + e.message; return; }
+  try { xa = compileConst(document.getElementById('customXa').value); }
+  catch (e) { err.textContent = 'x lower: ' + e.message; return; }
+  try { xb = compileConst(document.getElementById('customXb').value); }
+  catch (e) { err.textContent = 'x upper: ' + e.message; return; }
+  try { ya = compileConst(document.getElementById('customYa').value); }
+  catch (e) { err.textContent = 'y lower: ' + e.message; return; }
+  try { yb = compileConst(document.getElementById('customYb').value); }
+  catch (e) { err.textContent = 'y upper: ' + e.message; return; }
+  if (xb <= xa) { err.textContent = 'need x lower < x upper'; return; }
+  if (yb <= ya) { err.textContent = 'need y lower < y upper'; return; }
+  const raw = document.getElementById('customExpr').value.trim();
+  PRESETS.custom = {
+    label: 'custom',
+    latex: `f(x, y) = ${raw}`,
+    f, x: [xa, xb], y: [ya, yb],
+    levelHint: '',
+  };
+  if (activePresetKey === 'custom') rebuild();
+  else {
+    document.querySelectorAll('.presets button').forEach(x => x.classList.toggle('active', x.dataset.preset === 'custom'));
+    activePresetKey = 'custom';
+    document.getElementById('customForm').classList.add('shown');
+    rebuild();
+  }
+}
+
+// =============================================================================
+// BOOT
+// =============================================================================
+rebuild();
+resize();
+tick();
+
+// hooks for debugging
+window.__scene3d = scene3d;
+window.__scene2d = scene2d;
+window.__camera3d = camera3d;
+window.__sampled = () => sampled;
+window.__level = () => cuttingLevel;
+</script>
+</body>
+</html>
