@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Double Integral · Riemann Boxes Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin children explicitly. When #customForm is display:none, auto-placement
+     would shift the 1fr track onto footer, squashing scene-wrap to 1px. */
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  /* Custom form row */
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 200px;
+  }
+  #customForm input[type=text].small { width: 60px; }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  /* Scene */
+  #scene-wrap {
+    position: relative; overflow: hidden;
+  }
+  #scene-wrap canvas {
+    display: block; width: 100% !important; height: 100% !important;
+    position: absolute; inset: 0;
+  }
+
+  /* Overlay — top-right */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 340px;
+    z-index: 2;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 17px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 12px; margin-bottom: 8px; line-height: 1.55; }
+  .overlay .formula .katex { font-size: 0.95em; }
+  .overlay .readouts {
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; margin-top: 4px;
+    line-height: 1.75;
+  }
+  .overlay .readouts .lbl { color: var(--soft); }
+  .overlay .readouts .val { color: var(--gold); }
+  .overlay .readouts .val.good { color: #6ddd99; }
+  .overlay .readouts .val.neg { color: var(--rose); }
+  .overlay .legend {
+    font-size: 11px; color: var(--soft); margin-top: 10px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; line-height: 1.65;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  /* Caption bottom-center */
+  #caption {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 22, 0.78); border: 1px solid var(--pill-border);
+    border-radius: 8px; padding: 7px 16px;
+    font-size: 12.5px; color: var(--soft); text-align: center;
+    pointer-events: none; max-width: 92%; z-index: 2; font-style: italic;
+  }
+
+  /* Footer controls */
+  footer {
+    padding: 10px 24px 14px; border-top: 1px solid var(--pill-border);
+    background: rgba(14, 17, 22, 0.95);
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto auto auto;
+    gap: 10px 18px; align-items: center;
+  }
+  .controls .lbl { color: var(--soft); font-size: 13px; white-space: nowrap; }
+  .controls .lbl b { color: var(--ink); font-family: "Courier New", monospace; font-weight: normal; }
+  .controls .actions { display: flex; gap: 8px; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 7px 16px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  .speed-select, .mode-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 6px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Double Integral</b> · Riemann boxes under z = f(x, y)</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="hill" class="active">Gaussian hill</button>
+      <button data-preset="saddle">saddle (signed)</button>
+      <button data-preset="plane">tilted plane</button>
+      <button data-preset="wave">wave</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>f(x, y) =</label>
+    <input id="customExpr" type="text" value="sin(x)*cos(y)" placeholder="e.g. x^2 - y^2">
+    <label>x ∈ [</label>
+    <input id="customXa" type="text" class="small" value="-1">
+    <label>,</label>
+    <input id="customXb" type="text" class="small" value="1">
+    <label>]&nbsp; y ∈ [</label>
+    <input id="customYa" type="text" class="small" value="-1">
+    <label>,</label>
+    <input id="customYb" type="text" class="small" value="1">
+    <label>]</label>
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b> and <b>y</b> &nbsp;·&nbsp; functions: sin, cos, tan, sqrt, log, exp, abs &nbsp;·&nbsp; ^ for power &nbsp;·&nbsp; constants: pi, e</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="glcanvas"></canvas>
+
+    <!-- Overlay top-right -->
+    <div class="overlay">
+      <h2><b>Double Integral</b> · boxes under the surface</h2>
+      <div class="formula" id="ovIntegralFormula"></div>
+      <div class="readouts">
+        <div><span class="lbl">f(x, y) = </span><span class="val" id="ovFName">—</span></div>
+        <div><span class="lbl">domain R = </span><span class="val" id="ovDomain">—</span></div>
+        <div><span class="lbl">grid </span><span class="val" id="ovGrid">—</span>
+             <span class="lbl">&nbsp; ΔA = </span><span class="val" id="ovDA">—</span></div>
+        <div style="margin-top:4px; border-top:1px solid #23272d; padding-top:4px;">
+          <div><span class="lbl">Riemann sum: </span><span class="val" id="ovRiemann">—</span></div>
+          <div><span class="lbl">true value ≈ </span><span class="val good" id="ovTrue">—</span></div>
+          <div><span class="lbl">error: </span><span class="val" id="ovError">—</span>
+               <span class="lbl" id="ovErrorPct"></span></div>
+        </div>
+      </div>
+      <div class="legend">
+        <div><span class="swatch" style="background: linear-gradient(90deg,#6aa9ff,#ffd166);"></span>surface z = f(x, y) · gold = high, blue = low</div>
+        <div><span class="swatch" style="background: rgba(106,169,255,0.45);"></span>positive box (f > 0)</div>
+        <div><span class="swatch" style="background: rgba(255,90,90,0.55);"></span>negative box (f &lt; 0) — subtracts from total</div>
+        <div><span class="swatch" style="background: rgba(106,169,255,0.18);"></span>floor heatmap (domain colored by f value)</div>
+        <div style="margin-top:4px; font-style:italic;">drag to rotate · scroll to zoom</div>
+      </div>
+    </div>
+
+    <div id="caption">Few boxes — rough staircase. Drag the N and M sliders up to see the sum converge.</div>
+  </div>
+
+  <footer>
+    <div class="controls">
+      <span class="lbl">N (rows) <b id="lblN">6</b></span>
+      <input type="range" id="sliderN" min="2" max="40" value="6">
+      <span class="lbl">M (cols) <b id="lblM">6</b></span>
+      <input type="range" id="sliderM" min="2" max="40" value="6">
+      <select class="mode-select" id="sampleMode">
+        <option value="center" selected>sample: center (midpoint)</option>
+        <option value="ll">sample: lower-left</option>
+        <option value="ur">sample: upper-right</option>
+        <option value="min">sample: min (underestimate)</option>
+        <option value="max">sample: max (overestimate)</option>
+      </select>
+      <div class="actions">
+        <button class="action ghost" id="btnToggleSurface">hide surface</button>
+        <button class="action ghost" id="btnToggleFloor">hide floor</button>
+        <button class="action ghost" id="btnReset">↺ reset view</button>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================
+// CSS color constants for Three.js materials
+// ============================================================
+const C_BG       = 0x0e1116;
+const C_GOLD     = 0xffd166;
+const C_BLUE     = 0x6aa9ff;
+const C_ROSE     = 0xff5a5a;
+const C_GRID     = 0x1a1d22;
+const C_AXIS     = 0x3a414a;
+
+// Surface gradient: low (deep blue) → high (gold)
+const SURF_GRADIENT = ['#102050', '#3a3f9d', '#6750d8', '#c876b2', '#ffd166'];
+function gradColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const seg = t * (SURF_GRADIENT.length - 1);
+  const i = Math.min(SURF_GRADIENT.length - 2, Math.floor(seg));
+  const u = seg - i;
+  return new THREE.Color().lerpColors(new THREE.Color(SURF_GRADIENT[i]), new THREE.Color(SURF_GRADIENT[i + 1]), u);
+}
+
+// ============================================================
+// PRESETS
+// ============================================================
+const PRESETS = {
+  hill: {
+    label: 'Gaussian hill',
+    expr: 'exp(-(x² + y²))',
+    latex: 'f(x,y) = e^{-(x^2+y^2)}',
+    f: (x, y) => Math.exp(-(x * x + y * y)),
+    a: -1.5, b: 1.5, c: -1.5, d: 1.5,
+    caption: 'A Gaussian bump. The volume is finite even though the bump never quite reaches zero — it just gets very, very thin.',
+  },
+  saddle: {
+    label: 'saddle (signed)',
+    expr: 'x² − y²',
+    latex: 'f(x,y) = x^2 - y^2',
+    f: (x, y) => x * x - y * y,
+    a: -1, b: 1, c: -1, d: 1,
+    caption: 'Equal volume above and below the floor. The red boxes subtract from the blue ones — so the total is exactly zero.',
+  },
+  plane: {
+    label: 'tilted plane',
+    expr: 'x + y + 0.5',
+    latex: 'f(x,y) = x + y + 0.5',
+    f: (x, y) => x + y + 0.5,
+    a: 0, b: 1, c: 0, d: 1,
+    caption: 'A flat tilted roof. Volume = average height × area = 1.5 × 1 = 1.5. Watch the sum converge to exactly 1.5.',
+  },
+  wave: {
+    label: 'wave',
+    expr: 'sin(x)·cos(y)',
+    latex: 'f(x,y) = \\sin(x)\\cos(y)',
+    f: (x, y) => Math.sin(x) * Math.cos(y),
+    a: 0, b: Math.PI, c: 0, d: Math.PI,
+    caption: 'Hills and valleys partially cancel. The true integral works out to 2.',
+  },
+  custom: {
+    label: 'custom',
+    expr: 'sin(x)*cos(y)',
+    latex: 'f(x,y) = \\sin(x)\\cos(y)',
+    f: (x, y) => Math.sin(x) * Math.cos(y),
+    a: 0, b: Math.PI, c: 0, d: Math.PI,
+    caption: '',
+  },
+};
+let activeKey = 'hill';
+
+// ============================================================
+// MATH — Riemann sum and true integral
+// ============================================================
+function riemannSum(f, a, b, c, d, N, M, mode) {
+  const dx = (b - a) / N;
+  const dy = (d - c) / M;
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      const x0 = a + i * dx, x1 = x0 + dx;
+      const y0 = c + j * dy, y1 = y0 + dy;
+      let xi, yj;
+      if (mode === 'center') {
+        xi = x0 + dx * 0.5; yj = y0 + dy * 0.5;
+      } else if (mode === 'll') {
+        xi = x0; yj = y0;
+      } else if (mode === 'ur') {
+        xi = x1; yj = y1;
+      } else if (mode === 'min' || mode === 'max') {
+        // scan a 3×3 interior grid in the cell
+        let best = mode === 'min' ? Infinity : -Infinity;
+        for (let si = 0; si <= 2; si++) {
+          for (let sj = 0; sj <= 2; sj++) {
+            const sx = x0 + dx * (si + 0.5) / 3;
+            const sy = y0 + dy * (sj + 0.5) / 3;
+            const v = f(sx, sy);
+            if (mode === 'min' && v < best) { best = v; xi = sx; yj = sy; }
+            if (mode === 'max' && v > best) { best = v; xi = sx; yj = sy; }
+          }
+        }
+      }
+      const h = f(xi, yj);
+      if (isFinite(h)) sum += h * dx * dy;
+    }
+  }
+  return sum;
+}
+
+function trueIntegral(f, a, b, c, d) {
+  return riemannSum(f, a, b, c, d, 400, 400, 'center');
+}
+
+// ============================================================
+// EXPRESSION COMPILER — safe new Function pattern
+// ============================================================
+function compileF(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  const probes = [[0.3, 0.7], [-0.5, 1.1], [1, -0.8]];
+  for (const [tx, ty] of probes) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v))
+      throw new Error(`gives a non-number at (x=${tx}, y=${ty})`);
+  }
+  return fn;
+}
+function compileConst(raw) {
+  let s = String(raw).trim().toLowerCase()
+    .replace(/π/g, 'PI').replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E')
+    .replace(/\^/g, '**');
+  return new Function(`with (Math) { return (${s}); }`)();
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+const canvas = document.getElementById('glcanvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = false;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(C_BG);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 500);
+camera.up.set(0, 0, 1);
+camera.position.set(4, -5, 4);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// Lighting
+scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x111620, 0.85));
+scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+const camLight = new THREE.DirectionalLight(0xffffff, 0.55);
+camLight.position.set(0.3, 0.5, 1);
+camera.add(camLight);
+scene.add(camera);
+
+// Stage group — all dynamic geometry lives here, cleared on rebuild
+const stage = new THREE.Group();
+scene.add(stage);
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const o = g.children.pop();
+    o.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let showSurface = true;
+let showFloor   = true;
+let N = 6, M = 6;
+let sampleMode = 'center';
+let needsCameraFit = true;
+
+// ============================================================
+// PRETTY NUMBER — never show raw scientific notation in the UI
+// ============================================================
+function prettyNumber(v) {
+  if (!isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  if (abs === 0) return '0';
+  if (abs >= 0.001 && abs < 10000) return v.toPrecision(5).replace(/\.?0+$/, '');
+  // scientific: v = m × 10^k
+  const exp = Math.floor(Math.log10(abs));
+  const mant = v / Math.pow(10, exp);
+  const mantStr = mant.toPrecision(3).replace(/\.?0+$/, '');
+  const sign = exp < 0 ? '−' : '';
+  return `${mantStr} × 10<sup>${sign}${Math.abs(exp)}</sup>`;
+}
+
+// ============================================================
+// REBUILD — main render function
+// ============================================================
+function rebuild() {
+  disposeGroup(stage);
+
+  const p = PRESETS[activeKey];
+  const { f, a, b, c, d } = p;
+  const dx = (b - a) / N;
+  const dy = (d - c) / M;
+
+  // Sample the surface on a fine grid for mesh
+  const SURF_N = 80;
+  const { positions: surfPos, colors: surfCol, indices: surfIdx, zMin, zMax } =
+    sampleSurface(f, a, b, c, d, SURF_N, SURF_N);
+
+  // ── Surface mesh ──────────────────────────────────────────
+  if (showSurface) {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(surfPos, 3));
+    geom.setAttribute('color',    new THREE.BufferAttribute(surfCol, 3));
+    geom.setIndex(surfIdx);
+    geom.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.65, metalness: 0.05,
+      side: THREE.DoubleSide, transparent: true, opacity: 0.72,
+    });
+    stage.add(new THREE.Mesh(geom, mat));
+
+    // faint wireframe on surface
+    const wfMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.10 });
+    stage.add(new THREE.LineSegments(new THREE.WireframeGeometry(geom), wfMat));
+  }
+
+  // ── Floor heatmap ─────────────────────────────────────────
+  if (showFloor) {
+    buildFloorHeatmap(f, a, b, c, d, zMin, zMax, 60, 60);
+  }
+
+  // ── Grid on z=0 plane ─────────────────────────────────────
+  buildGridLines(a, b, c, d);
+
+  // ── Axes ──────────────────────────────────────────────────
+  buildAxes(a, b, c, d, zMin, zMax);
+
+  // ── Riemann boxes ─────────────────────────────────────────
+  const riemannEst = buildBoxes(f, a, b, c, d, N, M, dx, dy, sampleMode);
+
+  // ── True value ────────────────────────────────────────────
+  const trueVal = trueIntegral(f, a, b, c, d);
+  const err = Math.abs(riemannEst - trueVal);
+  const errPct = Math.abs(trueVal) > 1e-9 ? (err / Math.abs(trueVal) * 100) : null;
+
+  // ── Overlay readouts ──────────────────────────────────────
+  document.getElementById('ovFName').textContent = p.expr;
+  document.getElementById('ovDomain').innerHTML =
+    `[${fmtNum(a)}, ${fmtNum(b)}] × [${fmtNum(c)}, ${fmtNum(d)}]`;
+  document.getElementById('ovGrid').textContent = `${N} × ${M}`;
+  document.getElementById('ovDA').innerHTML = prettyNumber(dx * dy);
+  document.getElementById('ovRiemann').innerHTML = prettyNumber(riemannEst);
+  const trueEl = document.getElementById('ovTrue');
+  trueEl.innerHTML = prettyNumber(trueVal);
+  trueEl.className = 'val' + (trueVal < 0 ? ' neg' : ' good');
+  document.getElementById('ovError').innerHTML = prettyNumber(err);
+  const pctEl = document.getElementById('ovErrorPct');
+  if (errPct !== null) {
+    pctEl.textContent = ` (${errPct.toFixed(1)}% off)`;
+  } else {
+    pctEl.textContent = '';
+  }
+
+  // KaTeX formula
+  renderMath(document.getElementById('ovIntegralFormula'),
+    '\\displaystyle\\iint_R f\\,dA = \\lim_{N,M\\to\\infty}\\sum_{i,j} f(x_i,y_j)\\,\\Delta x\\,\\Delta y', false);
+
+  // Caption
+  const total = N * M;
+  let cap = p.caption || '';
+  if (total <= 36) {
+    cap = (cap ? cap + ' ' : '') + 'Few boxes — rough staircase. Drag N and M up to watch the sum converge.';
+  } else if (total >= 900) {
+    cap = 'Dense grid — boxes nearly invisible. The sum is essentially the true volume.';
+  } else {
+    cap = cap || 'The boxes are getting smaller. See how the sum gets closer to the true value.';
+  }
+  document.getElementById('caption').textContent = cap;
+
+  // Camera fit on first load or preset change
+  if (needsCameraFit) {
+    frameCamera(a, b, c, d, zMin, zMax);
+    needsCameraFit = false;
+  }
+}
+
+// Helper: format a number for domain display
+function fmtNum(v) {
+  const p = Math.PI;
+  if (Math.abs(v - p) < 1e-9) return 'π';
+  if (Math.abs(v + p) < 1e-9) return '−π';
+  if (Math.abs(v - 2 * p) < 1e-9) return '2π';
+  return v % 1 === 0 ? String(v) : v.toFixed(2);
+}
+
+// ============================================================
+// sampleSurface — builds vertex arrays for the surface mesh
+// ============================================================
+function sampleSurface(f, a, b, c, d, Nx, Ny) {
+  const positions = new Float32Array(Nx * Ny * 3);
+  const colors    = new Float32Array(Nx * Ny * 3);
+  const indices   = [];
+  // first pass: collect z values to find range
+  const zs = new Float32Array(Nx * Ny);
+  let zMin = Infinity, zMax = -Infinity;
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const x = a + (b - a) * i / (Nx - 1);
+      const y = c + (d - c) * j / (Ny - 1);
+      const z = f(x, y);
+      const v = isFinite(z) ? z : 0;
+      zs[j * Nx + i] = v;
+      if (v < zMin) zMin = v;
+      if (v > zMax) zMax = v;
+    }
+  }
+  const zSpan = Math.max(1e-9, zMax - zMin);
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const x = a + (b - a) * i / (Nx - 1);
+      const y = c + (d - c) * j / (Ny - 1);
+      const k = (j * Nx + i) * 3;
+      positions[k]     = x;
+      positions[k + 1] = y;
+      positions[k + 2] = zs[j * Nx + i];
+      const col = gradColor((zs[j * Nx + i] - zMin) / zSpan);
+      colors[k] = col.r; colors[k + 1] = col.g; colors[k + 2] = col.b;
+    }
+  }
+  for (let j = 0; j < Ny - 1; j++) {
+    for (let i = 0; i < Nx - 1; i++) {
+      const a0 = j * Nx + i, b0 = a0 + 1, c0 = a0 + Nx, d0 = c0 + 1;
+      indices.push(a0, b0, d0, a0, d0, c0);
+    }
+  }
+  return { positions, colors, indices, zMin, zMax };
+}
+
+// ============================================================
+// buildBoxes — the Riemann prisms
+// ============================================================
+function buildBoxes(f, a, b, c, d, N, M, dx, dy, mode) {
+  let totalSum = 0;
+  const posBoxes = [], negBoxes = [];
+
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      const x0 = a + i * dx, x1 = x0 + dx;
+      const y0 = c + j * dy, y1 = y0 + dy;
+
+      // Sample point
+      let xi, yj;
+      if (mode === 'center') {
+        xi = x0 + dx * 0.5; yj = y0 + dy * 0.5;
+      } else if (mode === 'll') {
+        xi = x0; yj = y0;
+      } else if (mode === 'ur') {
+        xi = x1; yj = y1;
+      } else {
+        let best = mode === 'min' ? Infinity : -Infinity;
+        xi = x0 + dx * 0.5; yj = y0 + dy * 0.5;
+        for (let si = 0; si <= 2; si++) {
+          for (let sj = 0; sj <= 2; sj++) {
+            const sx = x0 + dx * (si + 0.5) / 3;
+            const sy = y0 + dy * (sj + 0.5) / 3;
+            const v = f(sx, sy);
+            if (mode === 'min' && v < best) { best = v; xi = sx; yj = sy; }
+            if (mode === 'max' && v > best) { best = v; xi = sx; yj = sy; }
+          }
+        }
+      }
+
+      const h = f(xi, yj);
+      if (!isFinite(h) || Math.abs(h) < 1e-9) continue;
+      totalSum += h * dx * dy;
+
+      // Inset box slightly so individual prisms are visible with gaps
+      const inset = Math.min(dx, dy) * 0.04;
+      const bx0 = x0 + inset, bx1 = x1 - inset;
+      const by0 = y0 + inset, by1 = y1 - inset;
+      const bw = bx1 - bx0;
+      const bd = by1 - by0;
+      const bh = Math.abs(h);
+      if (bw < 1e-6 || bd < 1e-6 || bh < 1e-6) continue;
+
+      // z-position: positive boxes sit on z=0 going up; negative go down
+      const zBase = h >= 0 ? 0 : h;
+
+      const geom = new THREE.BoxGeometry(bw, bd, bh);
+      // BoxGeometry centers at origin, so translate
+      geom.translate((bx0 + bx1) / 2, (by0 + by1) / 2, zBase + bh / 2);
+
+      if (h >= 0) posBoxes.push(geom); else negBoxes.push(geom);
+    }
+  }
+
+  // Merge all positive boxes into one mesh, negative into another
+  function mergedMesh(geoms, color, opacity) {
+    if (geoms.length === 0) return null;
+    const merged = mergeGeometries(geoms);
+    const mat = new THREE.MeshStandardMaterial({
+      color, roughness: 0.6, metalness: 0.05,
+      transparent: true, opacity, side: THREE.FrontSide,
+    });
+    const mesh = new THREE.Mesh(merged, mat);
+    stage.add(mesh);
+
+    // Wireframe edges on the merged mesh so individual boxes show through
+    const wfMat = new THREE.LineBasicMaterial({
+      color: 0x000000, transparent: true, opacity: 0.35,
+    });
+    stage.add(new THREE.LineSegments(new THREE.WireframeGeometry(merged), wfMat));
+    return mesh;
+  }
+
+  mergedMesh(posBoxes, C_BLUE, 0.55);
+  mergedMesh(negBoxes, C_ROSE, 0.60);
+
+  return totalSum;
+}
+
+// Simple geometry merger (manual, no imports needed)
+function mergeGeometries(geoms) {
+  let totalVerts = 0, totalFaces = 0;
+  for (const g of geoms) {
+    totalVerts += g.attributes.position.count;
+    totalFaces += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const positions = new Float32Array(totalVerts * 3);
+  const normals   = new Float32Array(totalVerts * 3);
+  const indices   = new Uint32Array(totalFaces);
+  let vOff = 0, iOff = 0;
+  for (const g of geoms) {
+    const srcPos = g.attributes.position.array;
+    const srcNrm = g.attributes.normal ? g.attributes.normal.array : null;
+    const srcIdx = g.index ? g.index.array : null;
+    const vc = g.attributes.position.count;
+    positions.set(srcPos.subarray(0, vc * 3), vOff * 3);
+    if (srcNrm) normals.set(srcNrm.subarray(0, vc * 3), vOff * 3);
+    const ic = srcIdx ? srcIdx.length : vc;
+    for (let k = 0; k < ic; k++) {
+      indices[iOff + k] = (srcIdx ? srcIdx[k] : k) + vOff;
+    }
+    vOff += vc;
+    iOff += ic;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  out.setAttribute('normal',   new THREE.BufferAttribute(normals,   3));
+  out.setIndex(new THREE.BufferAttribute(indices, 1));
+  out.computeVertexNormals();
+  // dispose source geoms
+  for (const g of geoms) g.dispose();
+  return out;
+}
+
+// ============================================================
+// Floor heatmap — translucent z=0 plane colored by f(x,y)
+// ============================================================
+function buildFloorHeatmap(f, a, b, c, d, zMin, zMax, Nx, Ny) {
+  const positions = new Float32Array(Nx * Ny * 3);
+  const colors    = new Float32Array(Nx * Ny * 3);
+  const indices   = [];
+  const zSpan = Math.max(1e-9, zMax - zMin);
+  for (let j = 0; j < Ny; j++) {
+    for (let i = 0; i < Nx; i++) {
+      const x = a + (b - a) * i / (Nx - 1);
+      const y = c + (d - c) * j / (Ny - 1);
+      const z = f(x, y);
+      const v = isFinite(z) ? z : 0;
+      const k = (j * Nx + i) * 3;
+      positions[k]     = x;
+      positions[k + 1] = y;
+      positions[k + 2] = -0.001; // just below z=0
+      const col = gradColor((v - zMin) / zSpan);
+      colors[k] = col.r; colors[k + 1] = col.g; colors[k + 2] = col.b;
+    }
+  }
+  for (let j = 0; j < Ny - 1; j++) {
+    for (let i = 0; i < Nx - 1; i++) {
+      const a0 = j * Nx + i, b0 = a0 + 1, c0 = a0 + Nx, d0 = c0 + 1;
+      indices.push(a0, b0, d0, a0, d0, c0);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  geom.setIndex(indices);
+  const mat = new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.22,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  stage.add(new THREE.Mesh(geom, mat));
+}
+
+// ============================================================
+// Grid lines on z=0
+// ============================================================
+function buildGridLines(a, b, c, d) {
+  const pts = [];
+  const xRange = b - a, yRange = d - c;
+  const step = Math.min(xRange, yRange) > 4 ? 1.0 : 0.5;
+  const mat = new THREE.LineBasicMaterial({ color: C_GRID, transparent: true, opacity: 0.6 });
+  for (let x = Math.ceil(a / step) * step; x <= b + 1e-9; x += step) {
+    pts.push(new THREE.Vector3(x, c, 0), new THREE.Vector3(x, d, 0));
+  }
+  for (let y = Math.ceil(c / step) * step; y <= d + 1e-9; y += step) {
+    pts.push(new THREE.Vector3(a, y, 0), new THREE.Vector3(b, y, 0));
+  }
+  if (pts.length > 0) {
+    stage.add(new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(pts), mat
+    ));
+  }
+}
+
+// ============================================================
+// Axes
+// ============================================================
+function buildAxes(a, b, c, d, zMin, zMax) {
+  const mat = new THREE.LineBasicMaterial({ color: C_AXIS });
+  const pts = [
+    new THREE.Vector3(a, 0, 0), new THREE.Vector3(b, 0, 0),  // x-axis
+    new THREE.Vector3(0, c, 0), new THREE.Vector3(0, d, 0),  // y-axis
+    new THREE.Vector3(0, 0, Math.min(0, zMin) - 0.1),         // z-axis
+    new THREE.Vector3(0, 0, zMax + 0.1),
+  ];
+  stage.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat));
+
+  // z=0 border rect to make the base plane visible
+  const borderMat = new THREE.LineBasicMaterial({ color: 0x2a3040 });
+  const border = [
+    new THREE.Vector3(a, c, 0), new THREE.Vector3(b, c, 0),
+    new THREE.Vector3(b, c, 0), new THREE.Vector3(b, d, 0),
+    new THREE.Vector3(b, d, 0), new THREE.Vector3(a, d, 0),
+    new THREE.Vector3(a, d, 0), new THREE.Vector3(a, c, 0),
+  ];
+  stage.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(border), borderMat));
+}
+
+// ============================================================
+// Camera framing
+// ============================================================
+function frameCamera(a, b, c, d, zMin, zMax) {
+  const cx = (a + b) / 2, cy = (c + d) / 2, cz = (zMin + zMax) / 2;
+  controls.target.set(cx, cy, 0);
+  const reach = Math.max(b - a, d - c, Math.abs(zMax), Math.abs(zMin), 1);
+  camera.position.set(cx + reach * 1.6, cy - reach * 2.0, cz + reach * 1.4);
+  camera.near = reach * 0.01;
+  camera.far  = reach * 30;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+// ============================================================
+// KaTeX helper
+// ============================================================
+function renderMath(el, latex, display) {
+  if (!el) return;
+  if (window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: !!display }); }
+    catch (_) { el.textContent = latex; }
+  } else {
+    el.textContent = latex;
+  }
+}
+
+// ============================================================
+// RESIZE
+// ============================================================
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  const w = Math.max(120, wrap.clientWidth);
+  const h = Math.max(120, wrap.clientHeight);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', () => { resize(); });
+
+// ============================================================
+// RENDER LOOP
+// ============================================================
+function tick() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// ============================================================
+// CONTROLS
+// ============================================================
+const sliderN = document.getElementById('sliderN');
+const sliderM = document.getElementById('sliderM');
+const lblN    = document.getElementById('lblN');
+const lblM    = document.getElementById('lblM');
+
+sliderN.addEventListener('input', e => {
+  N = +e.target.value;
+  lblN.textContent = N;
+  rebuild();
+});
+sliderM.addEventListener('input', e => {
+  M = +e.target.value;
+  lblM.textContent = M;
+  rebuild();
+});
+
+document.getElementById('sampleMode').addEventListener('change', e => {
+  sampleMode = e.target.value;
+  rebuild();
+});
+
+const btnSurf  = document.getElementById('btnToggleSurface');
+const btnFloor = document.getElementById('btnToggleFloor');
+btnSurf.addEventListener('click', () => {
+  showSurface = !showSurface;
+  btnSurf.textContent = showSurface ? 'hide surface' : 'show surface';
+  rebuild();
+});
+btnFloor.addEventListener('click', () => {
+  showFloor = !showFloor;
+  btnFloor.textContent = showFloor ? 'hide floor' : 'show floor';
+  rebuild();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  const p = PRESETS[activeKey];
+  needsCameraFit = true;
+  rebuild();
+});
+
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b === btn)
+    );
+    document.getElementById('customForm').classList.toggle('shown', activeKey === 'custom');
+    needsCameraFit = true;
+    rebuild();
+  });
+});
+
+// Custom form
+document.getElementById('customApply').addEventListener('click', applyCustom);
+['customExpr', 'customXa', 'customXb', 'customYa', 'customYb'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyCustom();
+  });
+});
+
+function applyCustom() {
+  const errEl = document.getElementById('customError');
+  errEl.textContent = '';
+  let fn, xa, xb, ya, yb;
+  try { fn = compileF(document.getElementById('customExpr').value); }
+  catch (e) { errEl.textContent = 'f: ' + e.message; return; }
+  try { xa = compileConst(document.getElementById('customXa').value); }
+  catch (e) { errEl.textContent = 'x lower: ' + e.message; return; }
+  try { xb = compileConst(document.getElementById('customXb').value); }
+  catch (e) { errEl.textContent = 'x upper: ' + e.message; return; }
+  try { ya = compileConst(document.getElementById('customYa').value); }
+  catch (e) { errEl.textContent = 'y lower: ' + e.message; return; }
+  try { yb = compileConst(document.getElementById('customYb').value); }
+  catch (e) { errEl.textContent = 'y upper: ' + e.message; return; }
+  if (xb <= xa) { errEl.textContent = 'need x lower < x upper'; return; }
+  if (yb <= ya) { errEl.textContent = 'need y lower < y upper'; return; }
+  const raw = document.getElementById('customExpr').value.trim();
+  PRESETS.custom = {
+    label: 'custom',
+    expr: raw,
+    latex: `f(x,y) = ${raw}`,
+    f: fn, a: xa, b: xb, c: ya, d: yb,
+    caption: '',
+  };
+  needsCameraFit = true;
+  if (activeKey !== 'custom') {
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === 'custom')
+    );
+    activeKey = 'custom';
+    document.getElementById('customForm').classList.add('shown');
+  }
+  rebuild();
+}
+
+// ============================================================
+// INLINE SELF-TESTS
+// ============================================================
+(() => {
+  let pass = 0, fail = 0;
+  function assert(cond, msg) {
+    if (cond) { pass++; }
+    else { fail++; console.error('[double-integral] FAIL:', msg); }
+  }
+
+  // Constant f=1 over [0,2]×[0,3] = 6
+  const f1 = () => 1;
+  assert(Math.abs(riemannSum(f1, 0, 2, 0, 3, 10, 10, 'center') - 6) < 1e-9, 'constant=6');
+  assert(Math.abs(riemannSum(f1, 0, 2, 0, 3, 1, 1, 'center') - 6) < 1e-9, 'constant=6 single box');
+
+  // Tilted plane: ∫∫ (x+y+0.5) dA over [0,1]² = 1.5
+  const g = (x, y) => x + y + 0.5;
+  assert(Math.abs(trueIntegral(g, 0, 1, 0, 1) - 1.5) < 1e-3, 'tilted plane=1.5');
+
+  // Saddle: ∫∫ (x²−y²) dA over [−1,1]² = 0
+  const h = (x, y) => x * x - y * y;
+  assert(Math.abs(trueIntegral(h, -1, 1, -1, 1)) < 1e-3, 'saddle=0');
+
+  // riemannSum with lower-left mode on constant = same result
+  assert(Math.abs(riemannSum(f1, 0, 1, 0, 1, 5, 5, 'll') - 1) < 1e-9, 'constant ll=1');
+
+  // Max mode on positive increasing function >= center
+  const inc = (x, y) => x + y;
+  const rMax = riemannSum(inc, 0, 1, 0, 1, 4, 4, 'max');
+  const rCtr = riemannSum(inc, 0, 1, 0, 1, 4, 4, 'center');
+  assert(rMax >= rCtr - 1e-9, 'max >= center for increasing f');
+
+  if (fail === 0) {
+    console.log(`[double-integral] all ${pass} tests passed`);
+  } else {
+    console.warn(`[double-integral] ${fail} test(s) FAILED, ${pass} passed`);
+  }
+})();
+
+// ============================================================
+// BOOT
+// ============================================================
+rebuild();
+resize();
+tick();
+
+// Debug hooks
+window.__stage    = stage;
+window.__camera   = camera;
+window.__rebuild  = rebuild;
+window.__state    = () => ({ activeKey, N, M, sampleMode, showSurface, showFloor });
+</script>
+</body>
+</html>

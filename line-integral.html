@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line Integral · Work in a Vector Field</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+
+  /* ── App grid ── */
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin every direct child so toggling #customForm doesn't collapse the canvas. */
+  #app > header      { grid-row: 1; }
+  #app > #editRow    { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  /* ── Edit-path row ── */
+  #editRow {
+    display: none; padding: 8px 24px;
+    border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.04);
+    font-size: 13px; color: var(--soft); align-items: center; gap: 12px;
+  }
+  #editRow.shown { display: flex; }
+  #editRow span { font-style: italic; }
+  #editRow b { color: var(--ink); font-style: normal; }
+  #captionBanner {
+    padding: 6px 24px; font-size: 12px; color: var(--soft);
+    border-bottom: 1px solid var(--pill-border);
+    font-style: italic; min-height: 28px; line-height: 1.4;
+    background: rgba(14,17,22,0.6);
+  }
+
+  /* ── Scene ── */
+  #scene-wrap { position: relative; min-height: 0; overflow: hidden; }
+  #mainCanvas { display: block; width: 100%; height: 100%; cursor: default; }
+  #mainCanvas.editing { cursor: crosshair; }
+
+  /* ── Overlay ── */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px; padding: 12px 16px;
+    pointer-events: none; backdrop-filter: blur(6px);
+    max-width: 300px; min-width: 200px;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 15px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 12px; font-style: italic; margin-bottom: 6px; }
+  .overlay .formula .katex { font-size: 1em; }
+  .overlay .readout {
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    line-height: 1.6; margin-top: 6px; border-top: 1px solid var(--pill-border); padding-top: 6px;
+  }
+  .overlay .readout .row { display: flex; justify-content: space-between; gap: 10px; }
+  .overlay .readout .lbl { color: var(--soft); }
+  .overlay .readout .val { color: var(--gold); }
+  .overlay .readout .val.neg { color: var(--rose); }
+  .overlay .readout .note { color: var(--soft); font-size: 10.5px; font-style: italic; margin-top: 4px; }
+  .overlay .legend { margin-top: 8px; color: var(--soft); font-size: 11px; line-height: 1.6; }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; vertical-align: middle; margin-right: 6px;
+  }
+
+  /* ── Accumulator bar ── */
+  #accumBar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 34px; pointer-events: none;
+    display: flex; align-items: stretch;
+    border-top: 1px solid var(--pill-border);
+  }
+  #accumBarFill {
+    height: 100%;
+    transition: width 0.05s linear, background 0.15s;
+    min-width: 2px;
+  }
+  #accumBarLabel {
+    position: absolute; bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    font-family: "Courier New", monospace; font-size: 12px;
+    color: var(--ink); pointer-events: none;
+    text-shadow: 0 0 6px #0e1116;
+    white-space: nowrap;
+  }
+  #accumBarZero {
+    position: absolute; bottom: 0; top: 0; width: 2px;
+    background: var(--soft); opacity: 0.5;
+  }
+
+  /* ── Footer ── */
+  footer {
+    padding: 10px 24px; display: flex;
+    align-items: center; gap: 12px;
+    border-top: 1px solid var(--pill-border);
+    flex-wrap: wrap;
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 18px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  button.action.toggle-active {
+    background: rgba(255,209,102,0.15);
+    color: var(--gold); border: 1px solid var(--gold);
+  }
+  .speed-select {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 6px 10px; font-family: inherit; font-size: 12px;
+    cursor: pointer; outline: none;
+  }
+  .footer-spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Line Integral</b> · work in a vector field</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="tailwind" class="active">walk with tailwind</button>
+      <button data-preset="headwind">walk against</button>
+      <button data-preset="circle_rot">circle in spin field</button>
+      <button data-preset="circle_rad">circle in radial field</button>
+      <button data-preset="zigzag">zig-zag path</button>
+    </div>
+  </header>
+
+  <!-- Edit-path row: shown only when editMode is on -->
+  <div id="editRow">
+    <span><b>Edit mode on</b> — drag the gold handles to reshape the path. Click on the canvas to add a point (max 6).</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="mainCanvas"></canvas>
+
+    <!-- Overlay: top-right info box -->
+    <div class="overlay">
+      <h2><b>Line Integral</b></h2>
+      <div class="formula" id="ovFormula"></div>
+      <div class="readout" id="ovReadout">
+        <div class="row"><span class="lbl">field</span><span class="val" id="ovField">F = (1, 0)</span></div>
+        <div class="row"><span class="lbl">path type</span><span class="val" id="ovPathType">open arc</span></div>
+        <div class="row"><span class="lbl">W so far</span><span class="val" id="ovWnow">—</span></div>
+        <div class="row"><span class="lbl">W full path</span><span class="val" id="ovWfull">—</span></div>
+        <div class="row" id="ovGreenRow" style="display:none;"><span class="lbl">curl × area</span><span class="val" id="ovGreen">—</span></div>
+        <div class="note" id="ovNote"></div>
+      </div>
+      <div class="legend">
+        <div><span class="swatch" style="background: rgba(100,120,140,0.7);"></span>vector field F</div>
+        <div><span class="swatch" style="background: var(--gold);"></span>path C &amp; handles</div>
+        <div><span class="swatch" style="background: var(--blue);"></span>field vector F at particle</div>
+        <div><span class="swatch" style="background: var(--rose);"></span>tangent dr at particle</div>
+        <div><span class="swatch" style="background: #3a8c5a;"></span>particle</div>
+      </div>
+    </div>
+
+    <!-- Accumulator bar: grows as particle moves -->
+    <div id="accumBar">
+      <div id="accumBarZero"></div>
+      <div id="accumBarFill"></div>
+      <div id="accumBarLabel">W = 0</div>
+    </div>
+  </div>
+
+  <footer>
+    <button class="action" id="btnPlay">▶ Play</button>
+    <button class="action ghost" id="btnReset">↺ Reset</button>
+    <button class="action ghost" id="btnEdit">✏ Edit path</button>
+    <select class="speed-select" id="speedSel">
+      <option value="0.4">slow</option>
+      <option value="1" selected>normal</option>
+      <option value="2.5">fast</option>
+    </select>
+    <div class="footer-spacer"></div>
+    <span style="font-size:12px; color:var(--soft); font-style:italic;" id="footerCaption"></span>
+  </footer>
+</div>
+
+<!-- No Three.js needed — this is a pure 2D canvas visualization -->
+<script>
+// =============================================================================
+// UTILITIES
+// =============================================================================
+function prettyNumber(v) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 0.001 && a < 10000) return v.toFixed(3).replace(/\.?0+$/, '') || '0';
+  const exp = Math.floor(Math.log10(a));
+  const mantissa = v / Math.pow(10, exp);
+  const m = mantissa.toFixed(2).replace(/\.?0+$/, '');
+  return `${m} × 10<sup>${exp}</sup>`;
+}
+
+function renderMath(el, latex, displayMode) {
+  if (window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: !!displayMode }); return; }
+    catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+// =============================================================================
+// VECTOR FIELD PRESETS
+// =============================================================================
+const PRESETS = {
+  tailwind: {
+    label: 'Constant field (tailwind)',
+    fieldStr: 'F = (1, 0)',
+    latex: '\\vec{F}(x,y) = \\langle 1,\\, 0 \\rangle',
+    caption: 'Walking with a tailwind. The field pushes you forward the whole way. Work = force × distance = 4.',
+    P: (x, y) => 1,
+    Q: (x, y) => 0,
+    curlZ: (x, y) => 0,
+    handles: [[-2, 0], [0, 0], [2, 0]],
+  },
+  headwind: {
+    label: 'Constant field (headwind)',
+    fieldStr: 'F = (1, 0)',
+    latex: '\\vec{F}(x,y) = \\langle 1,\\, 0 \\rangle',
+    caption: 'Same force field, reversed walk. You fight the tailwind the whole time — work flips sign.',
+    P: (x, y) => 1,
+    Q: (x, y) => 0,
+    curlZ: (x, y) => 0,
+    handles: [[2, 0], [0, 0], [-2, 0]],
+  },
+  circle_rot: {
+    label: 'Rotational field — closed loop',
+    fieldStr: 'F = (−y, x)',
+    latex: '\\vec{F}(x,y) = \\langle -y,\\, x \\rangle',
+    caption: 'The field spins counterclockwise. You walk CCW along a circle — always going WITH the spin. Work piles up to 2π ≈ 6.28. This equals curl × area (Green\'s theorem).',
+    P: (x, y) => -y,
+    Q: (x, y) => x,
+    curlZ: (x, y) => 2,  // curl_z = ∂Q/∂x - ∂P/∂y = 1 - (-1) = 2
+    handles: null,        // null = use a closed circle, not editable handles
+    isCircle: true,
+    circleR: 1,
+  },
+  circle_rad: {
+    label: 'Radial field — closed loop',
+    fieldStr: 'F = (x, y)',
+    latex: '\\vec{F}(x,y) = \\langle x,\\, y \\rangle',
+    caption: 'Field points radially outward. You walk sideways around the circle — always perpendicular to the field. Dot product is zero everywhere. Net work = 0.',
+    P: (x, y) => x,
+    Q: (x, y) => y,
+    curlZ: (x, y) => 0,
+    handles: null,
+    isCircle: true,
+    circleR: 1,
+  },
+  zigzag: {
+    label: 'Zig-zag path',
+    fieldStr: 'F = (y, x)',
+    latex: '\\vec{F}(x,y) = \\langle y,\\, x \\rangle',
+    caption: 'Pieces of positive and negative work can cancel. Watch the bar climb, then fall back.',
+    P: (x, y) => y,
+    Q: (x, y) => x,
+    curlZ: (x, y) => 1 - 1,  // ∂Q/∂x - ∂P/∂y = 1 - 1 = 0
+    handles: [[-2, -1], [0, 1.5], [1, -1.5], [2, 0.5]],
+  },
+};
+
+// =============================================================================
+// STATE
+// =============================================================================
+let activeKey = 'tailwind';
+let handles = [];       // editable control points [{x, y}]
+let isCircle = false;   // true for circle presets
+let pathSamples = [];   // {x, y, t} at ~400 arc-length-uniform points
+let arcLengths = [];    // cumulative arc length array
+let totalArcLen = 0;
+
+let playing = false;
+let editMode = false;
+let speed = 1;
+let particleT = 0;      // 0..1 along path
+let animLastTime = 0;
+let PARTICLE_DURATION = 2.0; // seconds for full path at speed=1
+
+// Accumulated work up to particleT
+let workAccum = 0;
+let workFull = 0;       // precomputed full-path work
+let workSamples = [];   // workSamples[i] = work from t=0 to sample i
+
+// Drag state for handles
+let draggingHandle = -1;
+let dragOffX = 0, dragOffY = 0;
+
+// Canvas / context
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+
+// World domain: x,y ∈ [-3, 3]
+const WORLD = { xMin: -3, xMax: 3, yMin: -3, yMax: 3 };
+
+// =============================================================================
+// COORDINATE TRANSFORM  (world ↔ canvas)
+// =============================================================================
+function w2c(wx, wy) {
+  const W = canvas.width, H = canvas.height - 34; // leave 34px for accumbar
+  const padX = 40, padY = 30;
+  const usableW = W - 2 * padX, usableH = H - 2 * padY;
+  const scaleX = usableW / (WORLD.xMax - WORLD.xMin);
+  const scaleY = usableH / (WORLD.yMax - WORLD.yMin);
+  const scale = Math.min(scaleX, scaleY);
+  const ox = W / 2, oy = H / 2;
+  return {
+    x: ox + (wx - (WORLD.xMin + WORLD.xMax) / 2) * scale,
+    y: oy - (wy - (WORLD.yMin + WORLD.yMax) / 2) * scale,
+    scale,
+  };
+}
+function c2w(cx, cy) {
+  const W = canvas.width, H = canvas.height - 34;
+  const padX = 40, padY = 30;
+  const usableW = W - 2 * padX, usableH = H - 2 * padY;
+  const scaleX = usableW / (WORLD.xMax - WORLD.xMin);
+  const scaleY = usableH / (WORLD.yMax - WORLD.yMin);
+  const scale = Math.min(scaleX, scaleY);
+  const ox = W / 2, oy = H / 2;
+  const midX = (WORLD.xMin + WORLD.xMax) / 2;
+  const midY = (WORLD.yMin + WORLD.yMax) / 2;
+  return {
+    x: (cx - ox) / scale + midX,
+    y: -(cy - oy) / scale + midY,
+  };
+}
+
+// =============================================================================
+// PATH BUILDING
+// =============================================================================
+// Catmull-Rom spline: given control points, produce N sample points
+function catmullRomSample(pts, N) {
+  if (pts.length < 2) return pts.map(p => ({ x: p.x, y: p.y }));
+  const out = [];
+  const n = pts.length;
+  // For open curves: extend with phantom endpoints
+  const ext = [
+    { x: 2 * pts[0].x - pts[1].x, y: 2 * pts[0].y - pts[1].y },
+    ...pts,
+    { x: 2 * pts[n - 1].x - pts[n - 2].x, y: 2 * pts[n - 1].y - pts[n - 2].y },
+  ];
+  const segs = pts.length - 1;
+  const perSeg = Math.ceil(N / segs);
+  for (let s = 0; s < segs; s++) {
+    const p0 = ext[s], p1 = ext[s + 1], p2 = ext[s + 2], p3 = ext[s + 3];
+    const steps = (s === segs - 1) ? perSeg : perSeg;
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps;
+      const t2 = t * t, t3 = t2 * t;
+      const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3);
+      const y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3);
+      out.push({ x, y });
+    }
+  }
+  out.push({ ...pts[pts.length - 1] });
+  return out;
+}
+
+function buildCirclePath(r, N) {
+  const pts = [];
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * 2 * Math.PI;
+    pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+  }
+  return pts;
+}
+
+// Re-parameterize raw points by arc length: return array of N+1 uniform-arc-length points
+function arcLenReparameterize(rawPts, N) {
+  // build cumulative arc lengths
+  const cumLen = [0];
+  for (let i = 1; i < rawPts.length; i++) {
+    const dx = rawPts[i].x - rawPts[i - 1].x;
+    const dy = rawPts[i].y - rawPts[i - 1].y;
+    cumLen.push(cumLen[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const totalLen = cumLen[cumLen.length - 1];
+  if (totalLen < 1e-9) return rawPts.slice(0, N + 1);
+  const result = [];
+  const arcs = [];
+  let j = 0;
+  for (let i = 0; i <= N; i++) {
+    const target = (i / N) * totalLen;
+    while (j < cumLen.length - 1 && cumLen[j + 1] < target) j++;
+    let pt;
+    if (j >= rawPts.length - 1) {
+      pt = rawPts[rawPts.length - 1];
+    } else {
+      const span = cumLen[j + 1] - cumLen[j];
+      const frac = span < 1e-12 ? 0 : (target - cumLen[j]) / span;
+      pt = {
+        x: rawPts[j].x + frac * (rawPts[j + 1].x - rawPts[j].x),
+        y: rawPts[j].y + frac * (rawPts[j + 1].y - rawPts[j].y),
+      };
+    }
+    result.push(pt);
+    arcs.push(target);
+  }
+  return { pts: result, arcs, totalLen };
+}
+
+function buildPath() {
+  const preset = PRESETS[activeKey];
+  const N_RAW = 800;
+  let rawPts;
+  if (preset.isCircle) {
+    rawPts = buildCirclePath(preset.circleR, N_RAW);
+    isCircle = true;
+    handles = [];
+  } else {
+    isCircle = false;
+    // handles already set
+    rawPts = catmullRomSample(handles, N_RAW);
+  }
+  const { pts, arcs, totalLen } = arcLenReparameterize(rawPts, 400);
+  pathSamples = pts;
+  arcLengths = arcs;
+  totalArcLen = totalLen;
+
+  // Precompute work at each sample
+  const P = preset.P, Q = preset.Q;
+  workSamples = [0];
+  let wAcc = 0;
+  for (let i = 1; i < pathSamples.length; i++) {
+    const mx = (pathSamples[i].x + pathSamples[i - 1].x) / 2;
+    const my = (pathSamples[i].y + pathSamples[i - 1].y) / 2;
+    const dx = pathSamples[i].x - pathSamples[i - 1].x;
+    const dy = pathSamples[i].y - pathSamples[i - 1].y;
+    wAcc += P(mx, my) * dx + Q(mx, my) * dy;
+    workSamples.push(wAcc);
+  }
+  workFull = wAcc;
+
+  // Detect closed loop: first and last handle within 0.1 world units
+  const first = pathSamples[0], last = pathSamples[pathSamples.length - 1];
+  const dist = Math.sqrt((first.x - last.x) ** 2 + (first.y - last.y) ** 2);
+  const closed = dist < 0.2 || preset.isCircle;
+
+  // Green's theorem cross-check for closed loops
+  let greenArea = null;
+  if (closed && preset.curlZ) {
+    greenArea = computeGreenArea(preset.curlZ);
+  }
+
+  return { closed, greenArea };
+}
+
+// Numerically integrate curl_z over a bounding region (approximates ∮ F·dr)
+function computeGreenArea(curlZ) {
+  const N = 50;
+  let sum = 0;
+  const dx = (WORLD.xMax - WORLD.xMin) / N;
+  const dy = (WORLD.yMax - WORLD.yMin) / N;
+  // Check if point is roughly inside the path (convex hull approximation — good enough for circles)
+  // For a circle: just integrate over the circle's interior
+  // For general closed paths: use ray-casting
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const x = WORLD.xMin + (i + 0.5) * dx;
+      const y = WORLD.yMin + (j + 0.5) * dy;
+      if (pointInPath(x, y)) {
+        sum += curlZ(x, y) * dx * dy;
+      }
+    }
+  }
+  return sum;
+}
+
+// Ray-casting point-in-closed-path test
+function pointInPath(px, py) {
+  const pts = pathSamples;
+  let inside = false;
+  const n = pts.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y;
+    const xj = pts[j].x, yj = pts[j].y;
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// =============================================================================
+// DRAWING
+// =============================================================================
+function drawArrow(ctx, x1, y1, x2, y2, color, headLen, lineW) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+  const ux = dx / len, uy = dy / len;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineW || 1;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  // arrowhead
+  const hLen = headLen || 8;
+  const angle = 0.45;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hLen * (ux * Math.cos(angle) - uy * Math.sin(angle)),
+             y2 - hLen * (ux * Math.sin(angle) + uy * Math.cos(angle)));
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hLen * (ux * Math.cos(-angle) - uy * Math.sin(-angle)),
+             y2 - hLen * (ux * Math.sin(-angle) + uy * Math.cos(-angle)));
+  ctx.stroke();
+}
+
+let closedPath = false;
+let greenArea = null;
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#0e1116';
+  ctx.fillRect(0, 0, W, H - 34);
+
+  // Grid
+  drawGrid();
+
+  // Vector field
+  drawVectorField();
+
+  // Path
+  drawPath();
+
+  // Particle + vectors
+  drawParticle();
+
+  // Accumulator bar
+  drawAccumBar();
+}
+
+function drawGrid() {
+  ctx.save();
+  ctx.strokeStyle = '#1a1e24';
+  ctx.lineWidth = 1;
+  for (let x = -3; x <= 3; x++) {
+    const c0 = w2c(x, WORLD.yMin), c1 = w2c(x, WORLD.yMax);
+    ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.stroke();
+  }
+  for (let y = -3; y <= 3; y++) {
+    const c0 = w2c(WORLD.xMin, y), c1 = w2c(WORLD.xMax, y);
+    ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.stroke();
+  }
+  // Axes
+  ctx.strokeStyle = '#2e3540';
+  ctx.lineWidth = 1.5;
+  const axX0 = w2c(WORLD.xMin, 0), axX1 = w2c(WORLD.xMax, 0);
+  ctx.beginPath(); ctx.moveTo(axX0.x, axX0.y); ctx.lineTo(axX1.x, axX1.y); ctx.stroke();
+  const axY0 = w2c(0, WORLD.yMin), axY1 = w2c(0, WORLD.yMax);
+  ctx.beginPath(); ctx.moveTo(axY0.x, axY0.y); ctx.lineTo(axY1.x, axY1.y); ctx.stroke();
+  // Axis labels
+  ctx.fillStyle = '#3a414a';
+  ctx.font = '11px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  for (let x = -3; x <= 3; x += 1) {
+    if (x === 0) continue;
+    const c = w2c(x, 0);
+    ctx.fillText(x, c.x, c.y + 13);
+  }
+  ctx.textAlign = 'right';
+  for (let y = -3; y <= 3; y += 1) {
+    if (y === 0) continue;
+    const c = w2c(0, y);
+    ctx.fillText(y, c.x - 5, c.y + 4);
+  }
+  ctx.restore();
+}
+
+function drawVectorField() {
+  const preset = PRESETS[activeKey];
+  const P = preset.P, Q = preset.Q;
+  const ref = w2c(0, 0);
+  const scale = ref.scale;
+  // Grid of arrows: every 0.5 world units
+  const step = 0.5;
+  for (let x = WORLD.xMin + step / 2; x < WORLD.xMax; x += step) {
+    for (let y = WORLD.yMin + step / 2; y < WORLD.yMax; y += step) {
+      const fx = P(x, y), fy = Q(x, y);
+      const mag = Math.sqrt(fx * fx + fy * fy);
+      if (mag < 1e-9) continue;
+      // Normalize and scale for display; cap to prevent visual clutter
+      const displayLen = Math.min(mag, 1.5) / 1.5;
+      const maxArrowWorld = step * 0.42;
+      const ux = fx / mag * displayLen * maxArrowWorld;
+      const uy = fy / mag * displayLen * maxArrowWorld;
+      const c0 = w2c(x - ux * 0.5, y - uy * 0.5);
+      const c1 = w2c(x + ux * 0.5, y + uy * 0.5);
+      // Opacity based on magnitude
+      const alpha = 0.25 + 0.35 * Math.min(1, mag / 2);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      drawArrow(ctx, c0.x, c0.y, c1.x, c1.y, '#7a8794', scale * maxArrowWorld * 0.22, 1);
+      ctx.restore();
+    }
+  }
+}
+
+function drawPath() {
+  if (pathSamples.length < 2) return;
+  // Draw the path curve
+  ctx.save();
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = 'rgba(255,209,102,0.3)';
+  ctx.shadowBlur = 6;
+  ctx.beginPath();
+  const c0 = w2c(pathSamples[0].x, pathSamples[0].y);
+  ctx.moveTo(c0.x, c0.y);
+  for (let i = 1; i < pathSamples.length; i++) {
+    const c = w2c(pathSamples[i].x, pathSamples[i].y);
+    ctx.lineTo(c.x, c.y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Direction arrow on path (midpoint)
+  const mid = Math.floor(pathSamples.length / 2);
+  if (mid > 0 && mid < pathSamples.length - 1) {
+    const pm = pathSamples[mid], pn = pathSamples[mid + 1];
+    const tang = { x: pn.x - pm.x, y: pn.y - pm.y };
+    const tmag = Math.sqrt(tang.x ** 2 + tang.y ** 2);
+    if (tmag > 1e-9) {
+      const ref = w2c(0, 0);
+      const sc = ref.scale;
+      const len = 0.25;
+      const c1 = w2c(pm.x, pm.y), c2 = w2c(pm.x + tang.x / tmag * len, pm.y + tang.y / tmag * len);
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      drawArrow(ctx, c1.x, c1.y, c2.x, c2.y, '#ffd166', sc * 0.12, 2);
+      ctx.restore();
+    }
+  }
+
+  // Handles (edit mode or always-visible)
+  if (!isCircle) {
+    for (let i = 0; i < handles.length; i++) {
+      const c = w2c(handles[i].x, handles[i].y);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, editMode ? 9 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = editMode ? '#ffd166' : 'rgba(255,209,102,0.6)';
+      ctx.fill();
+      if (editMode) {
+        ctx.strokeStyle = '#0e1116';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Start/end markers
+  const start = pathSamples[0], end = pathSamples[pathSamples.length - 1];
+  const cS = w2c(start.x, start.y), cE = w2c(end.x, end.y);
+  if (!closedPath) {
+    // Start: hollow circle
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cS.x, cS.y, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+    // End: filled
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cE.x, cE.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd166'; ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawParticle() {
+  if (pathSamples.length < 2) return;
+  const idx = Math.min(Math.floor(particleT * (pathSamples.length - 1)), pathSamples.length - 2);
+  const pt = pathSamples[idx];
+  const ptNext = pathSamples[idx + 1];
+  const ref = w2c(0, 0);
+  const sc = ref.scale;
+
+  // Trail: draw path up to particle
+  if (idx > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,209,102,0.45)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    const cTr0 = w2c(pathSamples[0].x, pathSamples[0].y);
+    ctx.moveTo(cTr0.x, cTr0.y);
+    for (let i = 1; i <= idx; i++) {
+      const c = w2c(pathSamples[i].x, pathSamples[i].y);
+      ctx.lineTo(c.x, c.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Tangent vector dr (rose)
+  const tang = { x: ptNext.x - pt.x, y: ptNext.y - pt.y };
+  const tmag = Math.sqrt(tang.x ** 2 + tang.y ** 2);
+  if (tmag > 1e-9) {
+    const dispLen = 0.55; // world units for display
+    const tx = tang.x / tmag * dispLen, ty = tang.y / tmag * dispLen;
+    const cPt = w2c(pt.x, pt.y);
+    const cDr = w2c(pt.x + tx, pt.y + ty);
+    ctx.save();
+    ctx.lineWidth = 2.5;
+    drawArrow(ctx, cPt.x, cPt.y, cDr.x, cDr.y, '#ff7eb6', sc * 0.13, 2.5);
+    // Label "dr" near tip
+    ctx.fillStyle = '#ff7eb6';
+    ctx.font = 'italic 12px Georgia, serif';
+    ctx.fillText('dr', cDr.x + 6, cDr.y - 5);
+    ctx.restore();
+  }
+
+  // Field vector F at particle (blue)
+  const preset = PRESETS[activeKey];
+  const fx = preset.P(pt.x, pt.y), fy = preset.Q(pt.x, pt.y);
+  const fmag = Math.sqrt(fx * fx + fy * fy);
+  if (fmag > 1e-9) {
+    const dispLenF = Math.min(fmag, 2) / 2 * 0.6 + 0.2;
+    const fxd = fx / fmag * dispLenF, fyd = fy / fmag * dispLenF;
+    const cPt = w2c(pt.x, pt.y);
+    const cF = w2c(pt.x + fxd, pt.y + fyd);
+    ctx.save();
+    ctx.lineWidth = 2.5;
+    drawArrow(ctx, cPt.x, cPt.y, cF.x, cF.y, '#6aa9ff', sc * 0.13, 2.5);
+    ctx.fillStyle = '#6aa9ff';
+    ctx.font = 'italic 12px Georgia, serif';
+    ctx.fillText('F', cF.x + 6, cF.y - 5);
+    ctx.restore();
+  }
+
+  // Dot product sign indicator: shaded dot around particle
+  const dotProd = (fmag > 1e-9 && tmag > 1e-9)
+    ? (fx * tang.x / tmag + fy * tang.y / tmag)
+    : 0;
+  const cPt = w2c(pt.x, pt.y);
+  ctx.save();
+  if (dotProd > 0.01) {
+    ctx.fillStyle = 'rgba(80,180,120,0.22)';
+  } else if (dotProd < -0.01) {
+    ctx.fillStyle = 'rgba(255,126,182,0.22)';
+  } else {
+    ctx.fillStyle = 'rgba(200,200,200,0.12)';
+  }
+  ctx.beginPath();
+  ctx.arc(cPt.x, cPt.y, 18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Particle dot
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cPt.x, cPt.y, 7, 0, Math.PI * 2);
+  ctx.fillStyle = '#3a8c5a';
+  ctx.shadowColor = '#3aff6a';
+  ctx.shadowBlur = 10;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawAccumBar() {
+  const W = canvas.width;
+  const barH = 34;
+  const barY = canvas.height - barH;
+
+  ctx.fillStyle = '#12161c';
+  ctx.fillRect(0, barY, W, barH);
+  ctx.strokeStyle = '#23272d';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(W, barY); ctx.stroke();
+
+  // Zero line
+  const zeroX = W / 2;
+  ctx.save();
+  ctx.strokeStyle = '#4a5260';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(zeroX, barY + 2); ctx.lineTo(zeroX, barY + barH - 2); ctx.stroke();
+  ctx.restore();
+
+  // Filled bar
+  const maxW = workFull !== 0 ? Math.abs(workFull) * 1.3 : 8;
+  const fillFrac = Math.max(-1, Math.min(1, workAccum / maxW));
+  const fillPx = Math.abs(fillFrac) * (W / 2 - 10);
+  const barColor = workAccum >= 0 ? '#ffd166' : '#ff7eb6';
+  ctx.fillStyle = barColor;
+  if (fillFrac >= 0) {
+    ctx.fillRect(zeroX, barY + 5, fillPx, barH - 10);
+  } else {
+    ctx.fillRect(zeroX - fillPx, barY + 5, fillPx, barH - 10);
+  }
+
+  // Label
+  ctx.fillStyle = '#e8e6df';
+  ctx.font = '12px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  const sign = workAccum >= 0 ? '+' : '';
+  ctx.fillText(`W = ${sign}${workAccum.toFixed(3)}`, W / 2, barY + barH / 2 + 4);
+
+  // "Full path" ghost bar (faint outline)
+  if (workFull !== 0 && !playing && particleT < 0.98) {
+    const fullFrac = Math.max(-1, Math.min(1, workFull / maxW));
+    const fullPx = Math.abs(fullFrac) * (W / 2 - 10);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,209,102,0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    if (fullFrac >= 0) {
+      ctx.strokeRect(zeroX, barY + 5, fullPx, barH - 10);
+    } else {
+      ctx.strokeRect(zeroX - fullPx, barY + 5, fullPx, barH - 10);
+    }
+    ctx.restore();
+  }
+}
+
+// =============================================================================
+// ANIMATION LOOP
+// =============================================================================
+function tick(now) {
+  if (playing) {
+    const dt = (now - animLastTime) / 1000;
+    animLastTime = now;
+    particleT += dt * speed / PARTICLE_DURATION;
+    if (particleT >= 1) {
+      particleT = 1;
+      playing = false;
+      document.getElementById('btnPlay').textContent = '▶ Play';
+    }
+  }
+  animLastTime = now;
+
+  // Update accumulated work from precomputed array
+  if (workSamples.length > 1) {
+    const sIdx = Math.min(Math.floor(particleT * (workSamples.length - 1)), workSamples.length - 1);
+    workAccum = workSamples[sIdx];
+  }
+
+  updateOverlay();
+  draw();
+  requestAnimationFrame(tick);
+}
+
+// =============================================================================
+// OVERLAY / UI UPDATES
+// =============================================================================
+function updateOverlay() {
+  const preset = PRESETS[activeKey];
+
+  document.getElementById('ovField').textContent = preset.fieldStr;
+  document.getElementById('ovPathType').textContent = closedPath ? 'closed loop' : 'open arc';
+
+  const wNow = workAccum;
+  const wNowEl = document.getElementById('ovWnow');
+  wNowEl.innerHTML = (wNow >= 0 ? '+' : '') + prettyNumber(wNow);
+  wNowEl.className = 'val' + (wNow < -0.01 ? ' neg' : '');
+
+  const wFull = workFull;
+  const wFullEl = document.getElementById('ovWfull');
+  wFullEl.innerHTML = (wFull >= 0 ? '+' : '') + prettyNumber(wFull);
+  wFullEl.className = 'val' + (wFull < -0.01 ? ' neg' : '');
+
+  // Green's theorem row
+  const greenRow = document.getElementById('ovGreenRow');
+  if (closedPath && greenArea !== null) {
+    greenRow.style.display = 'flex';
+    const gEl = document.getElementById('ovGreen');
+    gEl.innerHTML = (greenArea >= 0 ? '+' : '') + prettyNumber(greenArea);
+    gEl.className = 'val' + (greenArea < -0.01 ? ' neg' : '');
+  } else {
+    greenRow.style.display = 'none';
+  }
+
+  // Note
+  const noteEl = document.getElementById('ovNote');
+  if (particleT >= 0.98) {
+    if (closedPath && greenArea !== null) {
+      noteEl.textContent = `∮ F·dr ≈ ${wFull.toFixed(3)} | curl×area ≈ ${greenArea.toFixed(3)} — they match! (Green's theorem)`;
+    } else {
+      noteEl.textContent = `Path complete. W = ${wFull.toFixed(3)}`;
+    }
+  } else {
+    noteEl.textContent = '';
+  }
+
+  // Footer caption
+  document.getElementById('footerCaption').textContent = preset.caption;
+}
+
+// =============================================================================
+// RESIZE
+// =============================================================================
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  canvas.width = wrap.clientWidth;
+  canvas.height = Math.max(200, wrap.clientHeight);
+}
+window.addEventListener('resize', () => { resize(); });
+
+// =============================================================================
+// LOAD PRESET
+// =============================================================================
+function loadPreset(key) {
+  activeKey = key;
+  const preset = PRESETS[key];
+
+  if (preset.handles) {
+    handles = preset.handles.map(p => ({ x: p[0], y: p[1] }));
+  } else {
+    handles = [];
+  }
+
+  const result = buildPath();
+  closedPath = result.closed;
+  greenArea = result.greenArea;
+
+  particleT = 0;
+  workAccum = 0;
+  playing = false;
+  document.getElementById('btnPlay').textContent = '▶ Play';
+
+  // Render KaTeX formula
+  renderMath(document.getElementById('ovFormula'), preset.latex);
+}
+
+// =============================================================================
+// POINTER EVENTS — draggable handles
+// =============================================================================
+function pointerWorld(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
+  return c2w(cx, cy);
+}
+
+function nearestHandle(wx, wy) {
+  const ref = w2c(0, 0);
+  const sc = ref.scale;
+  const threshold = 18 / sc; // world units equivalent to ~18px
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < handles.length; i++) {
+    const d = Math.sqrt((handles[i].x - wx) ** 2 + (handles[i].y - wy) ** 2);
+    if (d < threshold && d < bestDist) { best = i; bestDist = d; }
+  }
+  return best;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (!editMode || isCircle) return;
+  e.preventDefault();
+  const w = pointerWorld(e);
+  const hIdx = nearestHandle(w.x, w.y);
+  if (hIdx >= 0) {
+    draggingHandle = hIdx;
+    canvas.setPointerCapture(e.pointerId);
+  } else if (handles.length < 6) {
+    // Add a new handle (insert at nearest segment)
+    let bestSeg = 0, bestDist = Infinity;
+    for (let i = 0; i < handles.length - 1; i++) {
+      const mx = (handles[i].x + handles[i + 1].x) / 2;
+      const my = (handles[i].y + handles[i + 1].y) / 2;
+      const d = Math.sqrt((mx - w.x) ** 2 + (my - w.y) ** 2);
+      if (d < bestDist) { bestDist = d; bestSeg = i; }
+    }
+    handles.splice(bestSeg + 1, 0, { x: w.x, y: w.y });
+    draggingHandle = bestSeg + 1;
+    canvas.setPointerCapture(e.pointerId);
+    rebuildPath();
+  }
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (draggingHandle < 0 || !editMode) return;
+  e.preventDefault();
+  const w = pointerWorld(e);
+  handles[draggingHandle] = {
+    x: Math.max(WORLD.xMin + 0.1, Math.min(WORLD.xMax - 0.1, w.x)),
+    y: Math.max(WORLD.yMin + 0.1, Math.min(WORLD.yMax - 0.1, w.y)),
+  };
+  rebuildPath();
+});
+
+canvas.addEventListener('pointerup', e => {
+  if (draggingHandle >= 0) {
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    draggingHandle = -1;
+  }
+});
+
+function rebuildPath() {
+  const result = buildPath();
+  closedPath = result.closed;
+  greenArea = result.greenArea;
+  // Reset particle on path change
+  particleT = 0;
+  workAccum = 0;
+}
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+document.getElementById('btnPlay').addEventListener('click', () => {
+  if (particleT >= 0.98) { particleT = 0; workAccum = 0; }
+  playing = !playing;
+  document.getElementById('btnPlay').textContent = playing ? '⏸ Pause' : '▶ Play';
+  if (playing) animLastTime = performance.now();
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  particleT = 0;
+  workAccum = 0;
+  playing = false;
+  document.getElementById('btnPlay').textContent = '▶ Play';
+});
+
+document.getElementById('btnEdit').addEventListener('click', () => {
+  if (isCircle) {
+    document.getElementById('btnEdit').textContent = '✏ Edit path';
+    return; // circle presets aren't editable
+  }
+  editMode = !editMode;
+  const btn = document.getElementById('btnEdit');
+  btn.textContent = editMode ? '🔒 Lock path' : '✏ Edit path';
+  btn.className = editMode ? 'action toggle-active' : 'action ghost';
+  document.getElementById('editRow').classList.toggle('shown', editMode);
+  canvas.className = editMode ? 'editing' : '';
+});
+
+document.getElementById('speedSel').addEventListener('change', e => {
+  speed = +e.target.value;
+});
+
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.presets button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Exit edit mode on preset change
+    editMode = false;
+    document.getElementById('btnEdit').textContent = '✏ Edit path';
+    document.getElementById('btnEdit').className = 'action ghost';
+    document.getElementById('editRow').classList.remove('shown');
+    canvas.className = '';
+    loadPreset(btn.dataset.preset);
+  });
+});
+
+// =============================================================================
+// SELF-TESTS
+// =============================================================================
+(() => {
+  let passed = 0, failed = 0;
+
+  // Test 1: Straight line F=(1,0) from (0,0) to (2,0) → W = 2
+  {
+    const N = 1000;
+    let W = 0;
+    for (let i = 0; i < N; i++) {
+      const t1 = i / N, t2 = (i + 1) / N;
+      const x1 = 2 * t1, x2 = 2 * t2, y = 0;
+      W += 1 * (x2 - x1) + 0 * 0;
+    }
+    if (Math.abs(W - 2) < 1e-3) { passed++; }
+    else { console.error(`[line-integral] FAIL: straight line work got ${W}, expected 2`); failed++; }
+  }
+
+  // Test 2: Closed circle in rotational field F=(-y,x), r=1 → W = 2π
+  {
+    const M = 2000;
+    let W2 = 0;
+    for (let i = 0; i < M; i++) {
+      const a1 = i * 2 * Math.PI / M, a2 = (i + 1) * 2 * Math.PI / M;
+      const x1 = Math.cos(a1), y1 = Math.sin(a1);
+      const x2 = Math.cos(a2), y2 = Math.sin(a2);
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      W2 += (-my) * (x2 - x1) + (mx) * (y2 - y1);
+    }
+    if (Math.abs(W2 - 2 * Math.PI) < 0.01) { passed++; }
+    else { console.error(`[line-integral] FAIL: circle work got ${W2}, expected ${2 * Math.PI}`); failed++; }
+  }
+
+  // Test 3: Circle in radial field F=(x,y) → W ≈ 0
+  {
+    const M = 1000;
+    let W3 = 0;
+    for (let i = 0; i < M; i++) {
+      const a1 = i * 2 * Math.PI / M, a2 = (i + 1) * 2 * Math.PI / M;
+      const x1 = Math.cos(a1), y1 = Math.sin(a1);
+      const x2 = Math.cos(a2), y2 = Math.sin(a2);
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      W3 += mx * (x2 - x1) + my * (y2 - y1);
+    }
+    if (Math.abs(W3) < 0.01) { passed++; }
+    else { console.error(`[line-integral] FAIL: radial circle work got ${W3}, expected 0`); failed++; }
+  }
+
+  if (failed === 0) {
+    console.log(`[line-integral] all ${passed} tests passed`);
+  }
+})();
+
+// =============================================================================
+// DEBUG HOOKS
+// =============================================================================
+window.__state = () => ({ activeKey, particleT, workAccum, workFull, closedPath, greenArea });
+window.__rebuild = () => loadPreset(activeKey);
+window.__pathSamples = () => pathSamples;
+
+// =============================================================================
+// BOOT
+// =============================================================================
+resize();
+loadPreset('tailwind');
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

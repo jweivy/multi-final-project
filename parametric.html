@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parametric Surfaces · 3D Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+  /* Pin children explicitly — when #scene-wrap toggles or resizes, auto-placement
+     must not collapse anything. */
+  #app > header     { grid-row: 1; }
+  #app > #scene-wrap{ grid-row: 2; min-height: 0; position: relative; overflow: hidden; }
+  #app > footer     { grid-row: 3; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #scene-wrap canvas {
+    display: block; width: 100% !important; height: 100% !important;
+    position: absolute; inset: 0;
+  }
+
+  /* Overlay — top-right */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 320px;
+    z-index: 2;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 17px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .subtitle { color: var(--soft); font-size: 11.5px; margin-bottom: 8px; font-style: italic; }
+  .overlay .formula { color: var(--soft); font-size: 12px; font-style: italic; margin-bottom: 8px; line-height: 1.5; }
+  .overlay .formula .katex { font-size: 1.0em; }
+  .overlay .readouts {
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; margin-top: 4px;
+    line-height: 1.7;
+  }
+  .overlay .readouts .lbl { color: var(--soft); }
+  .overlay .readouts .val { color: var(--gold); }
+  .overlay .legend {
+    font-size: 11px; color: var(--soft); margin-top: 10px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; line-height: 1.65;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+  /* Caption below canvas */
+  #caption {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 22, 0.75); border: 1px solid var(--pill-border);
+    border-radius: 8px; padding: 7px 16px;
+    font-size: 12.5px; color: var(--soft); text-align: center;
+    pointer-events: none; max-width: 90%; z-index: 2;
+    font-style: italic;
+  }
+
+  footer {
+    padding: 10px 24px; display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto 1fr auto;
+    gap: 10px 14px; align-items: center;
+    border-top: 1px solid var(--pill-border);
+    flex-wrap: wrap;
+  }
+  footer .lbl { color: var(--soft); font-size: 13px; white-space: nowrap; }
+  footer .lbl b { color: var(--ink); font-family: "Courier New", monospace; font-weight: normal; }
+  footer .actions { display: flex; gap: 8px; grid-column: 7; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 7px 16px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  button.action.toggle-on { background: var(--blue); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Parametric Surfaces</b> · r(u, v) explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="sphere"   class="active">sphere</button>
+      <button data-preset="torus">torus</button>
+      <button data-preset="helicoid">helicoid</button>
+      <button data-preset="mobius">Möbius strip</button>
+      <button data-preset="graph">graph of f</button>
+    </div>
+  </header>
+
+  <div id="scene-wrap">
+    <canvas id="canvas"></canvas>
+    <div class="overlay">
+      <h2><b id="ovTitle">sphere</b></h2>
+      <div class="subtitle">r(u, v) maps a flat rectangle onto a 3D shape.</div>
+      <div class="formula" id="ovFormula"></div>
+      <div class="readouts">
+        <div><span class="lbl">probe (u, v) = </span><span class="val" id="ovUV">(—, —)</span></div>
+        <div><span class="lbl">r(u,v) = </span><span class="val" id="ovPos">(—, —, —)</span></div>
+        <div><span class="lbl">normal = </span><span class="val" id="ovNorm">(—, —, —)</span></div>
+      </div>
+      <div class="legend">
+        <div><span class="swatch" style="background:var(--blue);"></span>r<sub>u</sub> — tangent along u (drag probe to see)</div>
+        <div><span class="swatch" style="background:var(--rose);"></span>r<sub>v</sub> — tangent along v</div>
+        <div><span class="swatch" style="background:var(--gold);"></span>r<sub>u</sub> × r<sub>v</sub> — surface normal</div>
+        <div style="margin-top:4px; font-style:italic;">drag to rotate · scroll to zoom</div>
+      </div>
+    </div>
+    <div id="caption">Move the u/v sliders below to walk the probe along the surface.</div>
+  </div>
+
+  <footer>
+    <span class="lbl">u = <b id="lblU">0.00</b></span>
+    <input type="range" id="sliderU" min="0" max="1000" value="400">
+    <span class="lbl">v = <b id="lblV">0.00</b></span>
+    <input type="range" id="sliderV" min="0" max="1000" value="400">
+    <span class="lbl">density = <b id="lblDensity">40</b></span>
+    <input type="range" id="sliderDensity" min="8" max="80" value="40">
+    <div class="actions">
+      <button class="action ghost" id="btnWireframe">wireframe on</button>
+      <button class="action ghost" id="btnSolid">solid on</button>
+      <button class="action ghost" id="btnReset">↺ reset view</button>
+    </div>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+function prettyNumber(v) {
+  const av = Math.abs(v);
+  if (!isFinite(v)) return '?';
+  if (av === 0) return '0';
+  if (av >= 0.001 && av < 9999) return v.toFixed(3);
+  const exp = Math.floor(Math.log10(av));
+  const mantissa = (v / Math.pow(10, exp)).toFixed(2);
+  return `${mantissa} &times; 10<sup>${exp}</sup>`;
+}
+function fmt3(arr) {
+  return '(' + arr.map(x => isFinite(x) ? x.toFixed(3) : '?').join(', ') + ')';
+}
+
+function renderMath(el, latex) {
+  if (window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: false }); return; }
+    catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PI = Math.PI;
+
+const PRESETS = {
+  sphere: {
+    label: 'sphere',
+    latex: '\\vec{r}(u,v) = (\\cos u\\sin v,\\; \\sin u\\sin v,\\; \\cos v)',
+    caption: 'A sphere wrapped from a flat rectangle. Notice how the poles squish — all u values map to the same point there.',
+    r: (u, v) => [Math.cos(u)*Math.sin(v), Math.sin(u)*Math.sin(v), Math.cos(v)],
+    uMin: 0, uMax: 2*PI,
+    vMin: 0, vMax: PI,
+    uSteps: 60, vSteps: 40,
+  },
+  torus: {
+    label: 'torus',
+    latex: '\\vec{r}(u,v) = \\bigl((R+r\\cos v)\\cos u,\\;(R+r\\cos v)\\sin u,\\;r\\sin v\\bigr)',
+    caption: 'A donut. The angle u spins around the big axis; v spins around the tube. Two circles, nested.',
+    r: (u, v) => {
+      const R = 1.2, r = 0.4;
+      return [(R + r*Math.cos(v))*Math.cos(u), (R + r*Math.cos(v))*Math.sin(u), r*Math.sin(v)];
+    },
+    uMin: 0, uMax: 2*PI,
+    vMin: 0, vMax: 2*PI,
+    uSteps: 60, vSteps: 40,
+  },
+  helicoid: {
+    label: 'helicoid',
+    latex: '\\vec{r}(u,v) = (v\\cos u,\\; v\\sin u,\\; 0.4\\,u)',
+    caption: 'A spiral ramp — like a screw thread or a parking garage. Move u to spin up the helix; move v to walk toward or away from the center.',
+    r: (u, v) => [v*Math.cos(u), v*Math.sin(u), 0.4*u],
+    uMin: 0, uMax: 4*PI,
+    vMin: 0, vMax: 1,
+    uSteps: 80, vSteps: 30,
+  },
+  mobius: {
+    label: 'Möbius strip',
+    latex: '\\vec{r}(u,v)=\\bigl((1+0.3v\\cos\\tfrac{u}{2})\\cos u,\\;(1+0.3v\\cos\\tfrac{u}{2})\\sin u,\\;0.3v\\sin\\tfrac{u}{2}\\bigr)',
+    caption: 'One side, one edge. Walk the probe all the way around (u = 0 → 2π) and notice the normal flips — it is nonorientable.',
+    r: (u, v) => [
+      (1 + 0.3*v*Math.cos(u/2))*Math.cos(u),
+      (1 + 0.3*v*Math.cos(u/2))*Math.sin(u),
+      0.3*v*Math.sin(u/2),
+    ],
+    uMin: 0, uMax: 2*PI,
+    vMin: -1, vMax: 1,
+    uSteps: 120, vSteps: 20,
+  },
+  graph: {
+    label: 'graph of f',
+    latex: '\\vec{r}(u,v) = (u,\\; v,\\; \\sin u\\cos v)',
+    caption: 'Any 2D function z = f(x,y) is also a parametric surface: set r(u,v) = (u, v, f(u,v)). Here f = sin(u)·cos(v).',
+    r: (u, v) => [u, v, Math.sin(u)*Math.cos(v)],
+    uMin: -PI, uMax: PI,
+    vMin: -PI, vMax: PI,
+    uSteps: 60, vSteps: 60,
+  },
+};
+let activeKey = 'sphere';
+
+// =============================================================================
+// STATE
+// =============================================================================
+let showWireframe = true;
+let showSolid = true;
+let density = 40;   // user-adjustable grid resolution (overrides preset defaults when changed)
+let useCustomDensity = false;
+
+// probe in normalized [0,1] coords (mapped to u/v range per preset)
+let probeNormU = 0.40;
+let probeNormV = 0.40;
+
+// =============================================================================
+// THREE.JS SETUP
+// =============================================================================
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+camera.up.set(0, 0, 1);
+camera.position.set(4, -4, 3);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// Lighting
+scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x1a1f28, 0.8));
+scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+const camLight = new THREE.DirectionalLight(0xffffff, 0.65);
+camLight.position.set(0.3, 0.5, 1);
+camera.add(camLight);
+scene.add(camera);  // required so camera-parented light moves with camera
+
+// Stage group — all dynamic geometry lives here
+const stage = new THREE.Group();
+scene.add(stage);
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const o = g.children[g.children.length - 1];
+    g.remove(o);
+    o.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
+}
+
+// =============================================================================
+// GRADIENT — blue (low z) → gold (high z)
+// =============================================================================
+const GRAD_STOPS = ['#0d2050', '#1a4a9e', '#3a7bd5', '#c876b2', '#ffd166'];
+function gradColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const n = GRAD_STOPS.length - 1;
+  const seg = t * n;
+  const i = Math.min(n - 1, Math.floor(seg));
+  const f = seg - i;
+  return new THREE.Color().lerpColors(new THREE.Color(GRAD_STOPS[i]), new THREE.Color(GRAD_STOPS[i+1]), f);
+}
+
+// =============================================================================
+// MATH — central differences for tangent vectors
+// =============================================================================
+function evalR(r, u, v) {
+  const p = r(u, v);
+  return new THREE.Vector3(p[0], p[1], p[2]);
+}
+
+function tangents(r, u, v, h = 1e-3) {
+  const pu = evalR(r, u + h, v);
+  const mu = evalR(r, u - h, v);
+  const pv = evalR(r, u, v + h);
+  const mv = evalR(r, u, v - h);
+  const ru = pu.sub(mu).multiplyScalar(1 / (2 * h));
+  const rv = pv.sub(mv).multiplyScalar(1 / (2 * h));
+  return { ru, rv };
+}
+
+// =============================================================================
+// BUILD SURFACE MESH
+// =============================================================================
+function buildSurface(preset, Nu, Nv) {
+  const { r, uMin, uMax, vMin, vMax } = preset;
+  const positions = new Float32Array(Nu * Nv * 3);
+  const colors    = new Float32Array(Nu * Nv * 3);
+  const normals   = new Float32Array(Nu * Nv * 3);
+
+  // First pass: compute positions and find z range for gradient
+  let zMin = Infinity, zMax = -Infinity;
+  for (let j = 0; j < Nv; j++) {
+    for (let i = 0; i < Nu; i++) {
+      const u = uMin + (uMax - uMin) * i / (Nu - 1);
+      const v = vMin + (vMax - vMin) * j / (Nv - 1);
+      const [x, y, z] = r(u, v);
+      const k = (j * Nu + i) * 3;
+      positions[k]   = isFinite(x) ? x : 0;
+      positions[k+1] = isFinite(y) ? y : 0;
+      positions[k+2] = isFinite(z) ? z : 0;
+      if (isFinite(z)) { if (z < zMin) zMin = z; if (z > zMax) zMax = z; }
+    }
+  }
+  const zSpan = Math.max(1e-9, zMax - zMin);
+
+  // Second pass: normals (analytic via central diff) + vertex colors
+  const h = Math.min((uMax - uMin) / (Nu * 10), (vMax - vMin) / (Nv * 10), 1e-3);
+  for (let j = 0; j < Nv; j++) {
+    for (let i = 0; i < Nu; i++) {
+      const u = uMin + (uMax - uMin) * i / (Nu - 1);
+      const v = vMin + (vMax - vMin) * j / (Nv - 1);
+      const { ru, rv } = tangents(r, u, v, h);
+      const n = new THREE.Vector3().crossVectors(ru, rv);
+      if (n.lengthSq() > 1e-18) n.normalize(); else n.set(0, 0, 1);
+      const k = (j * Nu + i) * 3;
+      normals[k]   = n.x;
+      normals[k+1] = n.y;
+      normals[k+2] = n.z;
+      const t = (positions[k+2] - zMin) / zSpan;
+      const c = gradColor(t);
+      colors[k]   = c.r;
+      colors[k+1] = c.g;
+      colors[k+2] = c.b;
+    }
+  }
+
+  // Triangle indices
+  const indices = [];
+  for (let j = 0; j < Nv - 1; j++) {
+    for (let i = 0; i < Nu - 1; i++) {
+      const a = j * Nu + i, b = a + 1, c = a + Nu, d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  geom.setAttribute('normal',   new THREE.BufferAttribute(normals, 3));
+  geom.setIndex(indices);
+  return { geom, zMin, zMax, Nu, Nv };
+}
+
+// =============================================================================
+// BUILD WIREFRAME (iso-u and iso-v lines)
+// =============================================================================
+function buildWireframe(preset, Nu, Nv) {
+  const { r, uMin, uMax, vMin, vMax } = preset;
+  const pts = [];
+
+  // Lines of constant u (one every ~10 grid steps)
+  const uStep = Math.max(1, Math.round(Nu / 12));
+  for (let i = 0; i < Nu; i += uStep) {
+    const u = uMin + (uMax - uMin) * i / (Nu - 1);
+    for (let j = 0; j < Nv - 1; j++) {
+      const v0 = vMin + (vMax - vMin) * j / (Nv - 1);
+      const v1 = vMin + (vMax - vMin) * (j + 1) / (Nv - 1);
+      const [x0,y0,z0] = r(u, v0);
+      const [x1,y1,z1] = r(u, v1);
+      if ([x0,y0,z0,x1,y1,z1].every(isFinite)) {
+        pts.push(new THREE.Vector3(x0,y0,z0), new THREE.Vector3(x1,y1,z1));
+      }
+    }
+  }
+  // Lines of constant v
+  const vStep = Math.max(1, Math.round(Nv / 12));
+  for (let j = 0; j < Nv; j += vStep) {
+    const v = vMin + (vMax - vMin) * j / (Nv - 1);
+    for (let i = 0; i < Nu - 1; i++) {
+      const u0 = uMin + (uMax - uMin) * i / (Nu - 1);
+      const u1 = uMin + (uMax - uMin) * (i + 1) / (Nu - 1);
+      const [x0,y0,z0] = r(u0, v);
+      const [x1,y1,z1] = r(u1, v);
+      if ([x0,y0,z0,x1,y1,z1].every(isFinite)) {
+        pts.push(new THREE.Vector3(x0,y0,z0), new THREE.Vector3(x1,y1,z1));
+      }
+    }
+  }
+
+  if (pts.length === 0) return null;
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  return geom;
+}
+
+// =============================================================================
+// ARROW HELPER — creates a Group with shaft + cone head
+// =============================================================================
+function makeArrow(from, to, color) {
+  const dir = to.clone().sub(from);
+  const len = dir.length();
+  if (len < 1e-9) return new THREE.Group();
+  const g = new THREE.Group();
+
+  // shaft
+  const shaftGeom = new THREE.BufferGeometry().setFromPoints([from, to]);
+  g.add(new THREE.Line(shaftGeom, new THREE.LineBasicMaterial({ color })));
+
+  // cone head
+  const headLen = Math.min(len * 0.32, 0.12);
+  const headGeom = new THREE.ConeGeometry(0.025, headLen, 8);
+  const headMat  = new THREE.MeshBasicMaterial({ color });
+  const head = new THREE.Mesh(headGeom, headMat);
+  // position and orient
+  const axis = new THREE.Vector3(0, 1, 0);
+  const normDir = dir.clone().normalize();
+  head.quaternion.setFromUnitVectors(axis, normDir);
+  head.position.copy(to).sub(normDir.clone().multiplyScalar(headLen / 2));
+  g.add(head);
+  return g;
+}
+
+// =============================================================================
+// GROUND GRID
+// =============================================================================
+function buildGroundGrid(zMin) {
+  const size = 5, divs = 20;
+  const step = size * 2 / divs;
+  const pts = [];
+  const mat = new THREE.LineBasicMaterial({ color: 0x1c2028, transparent: true, opacity: 0.6 });
+  for (let i = 0; i <= divs; i++) {
+    const t = -size + i * step;
+    pts.push(new THREE.Vector3(-size, t, 0), new THREE.Vector3(size, t, 0));
+    pts.push(new THREE.Vector3(t, -size, 0), new THREE.Vector3(t, size, 0));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  const grid = new THREE.LineSegments(geom, mat);
+  grid.position.z = zMin - 0.01;
+  return grid;
+}
+
+// =============================================================================
+// REBUILD
+// =============================================================================
+function rebuild() {
+  disposeGroup(stage);
+
+  const preset = PRESETS[activeKey];
+  const Nu = useCustomDensity ? density : Math.max(density, preset.uSteps || 60);
+  const Nv = useCustomDensity ? Math.round(density * 0.7) : Math.max(Math.round(density * 0.7), preset.vSteps || 40);
+
+  // Surface mesh
+  const { geom, zMin, zMax, Nu: _Nu, Nv: _Nv } = buildSurface(preset, Nu, Nv);
+
+  if (showSolid) {
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.65, metalness: 0.05,
+      side: THREE.DoubleSide,
+    });
+    stage.add(new THREE.Mesh(geom, mat));
+  }
+
+  if (showWireframe) {
+    const wfGeom = buildWireframe(preset, Nu, Nv);
+    if (wfGeom) {
+      const wfMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: showSolid ? 0.22 : 0.55 });
+      stage.add(new THREE.LineSegments(wfGeom, wfMat));
+    }
+  }
+
+  if (!showSolid && !showWireframe) {
+    // fallback: always show wireframe if both toggled off
+    const wfGeom = buildWireframe(preset, Nu, Nv);
+    if (wfGeom) {
+      stage.add(new THREE.LineSegments(wfGeom, new THREE.LineBasicMaterial({ color: 0x6aa9ff, transparent: true, opacity: 0.5 })));
+    }
+  }
+
+  // Ground grid
+  stage.add(buildGroundGrid(zMin));
+
+  // Center camera on first load or reset
+  frameCameraToPreset(preset, zMin, zMax);
+
+  // Update probe
+  updateProbe();
+
+  // Update overlay
+  document.getElementById('ovTitle').textContent = preset.label;
+  const formulaEl = document.getElementById('ovFormula');
+  renderMath(formulaEl, preset.latex);
+  document.getElementById('caption').textContent = preset.caption;
+}
+
+// =============================================================================
+// PROBE — gold sphere + tangent vectors + normal
+// =============================================================================
+let probeGroup = null;
+
+function updateProbe() {
+  if (probeGroup) { stage.remove(probeGroup); disposeGroup(probeGroup); }
+  probeGroup = new THREE.Group();
+  stage.add(probeGroup);
+
+  const preset = PRESETS[activeKey];
+  const { r, uMin, uMax, vMin, vMax } = preset;
+  const u0 = uMin + probeNormU * (uMax - uMin);
+  const v0 = vMin + probeNormV * (vMax - vMin);
+
+  const [px, py, pz] = r(u0, v0);
+  if (!isFinite(px) || !isFinite(py) || !isFinite(pz)) {
+    document.getElementById('ovUV').textContent = '(invalid)';
+    return;
+  }
+
+  const P = new THREE.Vector3(px, py, pz);
+
+  // Probe sphere
+  const sphereGeom = new THREE.SphereGeometry(0.055, 16, 16);
+  const sphereMat  = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+  const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+  sphere.position.copy(P);
+  probeGroup.add(sphere);
+
+  // Tangents
+  const h = Math.min((uMax - uMin) / 200, (vMax - vMin) / 200, 0.005);
+  const { ru, rv } = tangents(r, u0, v0, h);
+
+  // Normalize for display — scale to visible length
+  const normalVec = new THREE.Vector3().crossVectors(ru, rv);
+  const ruLen = ru.length();
+  const rvLen = rv.length();
+  const nLen  = normalVec.length();
+  const displayLen = 0.45;
+
+  const ruDir = ruLen > 1e-9 ? ru.clone().normalize() : new THREE.Vector3(1, 0, 0);
+  const rvDir = rvLen > 1e-9 ? rv.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  const nDir  = nLen  > 1e-9 ? normalVec.clone().normalize() : new THREE.Vector3(0, 0, 1);
+
+  // Slight offset along normal so arrows sit on top of the surface
+  const offset = nDir.clone().multiplyScalar(0.02);
+  const Poff = P.clone().add(offset);
+
+  // r_u arrow (blue)
+  const ruEnd = Poff.clone().add(ruDir.clone().multiplyScalar(displayLen));
+  probeGroup.add(makeArrow(Poff, ruEnd, 0x6aa9ff));
+
+  // r_v arrow (rose)
+  const rvEnd = Poff.clone().add(rvDir.clone().multiplyScalar(displayLen));
+  probeGroup.add(makeArrow(Poff, rvEnd, 0xff7eb6));
+
+  // Normal arrow (gold, longer)
+  const nEnd = Poff.clone().add(nDir.clone().multiplyScalar(displayLen * 1.3));
+  probeGroup.add(makeArrow(Poff, nEnd, 0xffd166));
+
+  // Update readouts
+  document.getElementById('ovUV').textContent  = `(${u0.toFixed(3)}, ${v0.toFixed(3)})`;
+  document.getElementById('ovPos').textContent = fmt3([px, py, pz]);
+  const nNorm = nLen > 1e-9 ? [nDir.x, nDir.y, nDir.z] : [0, 0, 0];
+  document.getElementById('ovNorm').textContent = fmt3(nNorm);
+}
+
+// =============================================================================
+// CAMERA
+// =============================================================================
+let initialCameraSet = false;
+const defaultCameraPositions = {
+  sphere:   [3.5, -3.5, 2.5],
+  torus:    [4.0, -4.0, 2.5],
+  helicoid: [4.0, -4.0, 5.0],
+  mobius:   [3.5, -3.5, 2.0],
+  graph:    [5.5, -5.5, 4.5],
+};
+
+function frameCameraToPreset(preset, zMin, zMax) {
+  const { uMin, uMax, vMin, vMax, r } = preset;
+  // Sample 25 pts to get bounding box
+  let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+  for (let i = 0; i < 5; i++) {
+    for (let j = 0; j < 5; j++) {
+      const u = uMin + (uMax - uMin) * i / 4;
+      const v = vMin + (vMax - vMin) * j / 4;
+      const [x, y, z] = r(u, v);
+      if (isFinite(x)) { xMin = Math.min(xMin, x); xMax = Math.max(xMax, x); }
+      if (isFinite(y)) { yMin = Math.min(yMin, y); yMax = Math.max(yMax, y); }
+    }
+  }
+  const cx = (xMin + xMax) / 2, cy = (yMin + yMax) / 2, cz = (zMin + zMax) / 2;
+  controls.target.set(cx, cy, cz);
+  if (!initialCameraSet) {
+    const def = defaultCameraPositions[activeKey] || [4, -4, 3];
+    camera.position.set(def[0], def[1], def[2]);
+    initialCameraSet = true;
+  }
+  const reach = Math.max(xMax - xMin, yMax - yMin, zMax - zMin);
+  camera.near = reach * 0.005;
+  camera.far  = reach * 30;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function resetView() {
+  initialCameraSet = false;
+  rebuild();
+}
+
+// =============================================================================
+// RESIZE / RENDER LOOP
+// =============================================================================
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  const w = Math.max(120, wrap.clientWidth);
+  const h = Math.max(120, wrap.clientHeight);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+function tick() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// =============================================================================
+// SLIDER SYNC
+// =============================================================================
+function syncSliderLabels() {
+  const preset = PRESETS[activeKey];
+  const { uMin, uMax, vMin, vMax } = preset;
+  const u0 = uMin + probeNormU * (uMax - uMin);
+  const v0 = vMin + probeNormV * (vMax - vMin);
+  document.getElementById('lblU').textContent = u0.toFixed(3);
+  document.getElementById('lblV').textContent = v0.toFixed(3);
+  document.getElementById('lblDensity').textContent = density;
+}
+
+document.getElementById('sliderU').addEventListener('input', e => {
+  probeNormU = +e.target.value / 1000;
+  syncSliderLabels();
+  updateProbe();
+});
+document.getElementById('sliderV').addEventListener('input', e => {
+  probeNormV = +e.target.value / 1000;
+  syncSliderLabels();
+  updateProbe();
+});
+document.getElementById('sliderDensity').addEventListener('input', e => {
+  density = +e.target.value;
+  useCustomDensity = true;
+  syncSliderLabels();
+  rebuild();
+});
+
+// =============================================================================
+// TOGGLE BUTTONS
+// =============================================================================
+const btnWireframe = document.getElementById('btnWireframe');
+const btnSolid     = document.getElementById('btnSolid');
+
+function syncToggleButtons() {
+  btnWireframe.textContent = showWireframe ? 'wireframe on' : 'wireframe off';
+  btnWireframe.classList.toggle('toggle-on', showWireframe);
+  btnSolid.textContent = showSolid ? 'solid on' : 'solid off';
+  btnSolid.classList.toggle('toggle-on', showSolid);
+}
+btnWireframe.addEventListener('click', () => { showWireframe = !showWireframe; syncToggleButtons(); rebuild(); });
+btnSolid.addEventListener('click',     () => { showSolid     = !showSolid;     syncToggleButtons(); rebuild(); });
+document.getElementById('btnReset').addEventListener('click', resetView);
+syncToggleButtons();
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b => b.classList.toggle('active', b === btn));
+    probeNormU = 0.40;
+    probeNormV = 0.40;
+    useCustomDensity = false;
+    density = 40;
+    initialCameraSet = false;
+    document.getElementById('sliderU').value = 400;
+    document.getElementById('sliderV').value = 400;
+    document.getElementById('sliderDensity').value = 40;
+    rebuild();
+    syncSliderLabels();
+    syncToggleButtons();
+  });
+});
+
+// =============================================================================
+// INLINE SELF-TESTS
+// =============================================================================
+(() => {
+  let pass = 0, fail = 0;
+  function assert(cond, msg) {
+    if (cond) { pass++; }
+    else { fail++; console.error('[parametric] FAIL:', msg); }
+  }
+
+  // Sphere: |r| should be 1 everywhere
+  const sphere = PRESETS.sphere.r;
+  for (let i = 0; i < 10; i++) {
+    const u = Math.random() * 2 * Math.PI;
+    const v = Math.random() * Math.PI;
+    const p = sphere(u, v);
+    assert(Math.abs(Math.hypot(...p) - 1) < 1e-9, `sphere |r|=1 at u=${u.toFixed(2)}, v=${v.toFixed(2)}`);
+  }
+
+  // Graph preset: r(u,v) = (u, v, ...)
+  const graph = PRESETS.graph.r;
+  const g = graph(0.7, -0.4);
+  assert(Math.abs(g[0] - 0.7) < 1e-9, 'graph identity x');
+  assert(Math.abs(g[1] + 0.4) < 1e-9, 'graph identity y');
+
+  // Cross product — ru x rv should be perpendicular to both ru and rv
+  const { ru, rv } = tangents(sphere, 1.0, 0.8, 1e-4);
+  const n = new THREE.Vector3().crossVectors(ru, rv);
+  assert(Math.abs(n.dot(ru)) < 1e-4, 'normal ⊥ r_u');
+  assert(Math.abs(n.dot(rv)) < 1e-4, 'normal ⊥ r_v');
+
+  // Torus: at v=0 the z coordinate should be 0
+  const torus = PRESETS.torus.r;
+  const t1 = torus(0.5, 0);
+  assert(Math.abs(t1[2]) < 1e-9, 'torus v=0 → z=0');
+
+  if (fail === 0) {
+    console.log(`[parametric] all ${pass} tests passed`);
+  } else {
+    console.warn(`[parametric] ${fail} test(s) FAILED (${pass} passed)`);
+  }
+})();
+
+// =============================================================================
+// BOOT
+// =============================================================================
+rebuild();
+resize();
+syncSliderLabels();
+tick();
+
+// Debugging hooks
+window.__stage   = stage;
+window.__camera  = camera;
+window.__rebuild = rebuild;
+window.__state   = () => ({ activeKey, probeNormU, probeNormV, density, showWireframe, showSolid });
+</script>
+</body>
+</html>
