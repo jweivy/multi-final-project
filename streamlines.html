@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streamlines · Flow of Vector Fields</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin children explicitly. When #customForm is display:none, auto-placement
+     would shift the 1fr track onto footer, squashing scene-wrap to 1px. */
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 180px;
+  }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp  { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  #scene-wrap { position: relative; min-height: 0; overflow: hidden; }
+  #main-canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+  /* Overlay top-right */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 290px;
+    z-index: 5;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 16px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .katex-line { color: var(--soft); font-size: 12px; margin-bottom: 5px; }
+  .overlay .katex-line .katex { font-size: 1.05em; }
+  .overlay .field-formula { color: var(--ink); font-size: 12.5px; margin-bottom: 6px; font-family: "Courier New", monospace; }
+  .overlay .caption {
+    color: var(--soft); font-size: 12px; font-style: italic; line-height: 1.55;
+    border-top: 1px solid var(--pill-border); padding-top: 6px; margin-top: 6px;
+  }
+  .overlay .readouts {
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    line-height: 1.65; border-top: 1px solid var(--pill-border);
+    padding-top: 6px; margin-top: 6px;
+  }
+  .overlay .readouts .lbl { color: var(--soft); }
+  .overlay .readouts .val { color: var(--gold); }
+  .overlay .readouts .row { display: flex; justify-content: space-between; gap: 8px; }
+  .overlay .hint {
+    margin-top: 5px; font-size: 11px; color: var(--soft); font-style: italic;
+    line-height: 1.5;
+  }
+  .overlay .legend {
+    color: var(--soft); font-size: 11px; margin-top: 6px; line-height: 1.6;
+    border-top: 1px solid var(--pill-border); padding-top: 6px;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  footer {
+    padding: 10px 24px; display: flex; gap: 10px; flex-wrap: wrap;
+    align-items: center; border-top: 1px solid var(--pill-border);
+  }
+  footer .lbl { color: var(--soft); font-size: 12.5px; white-space: nowrap; }
+  footer .lbl b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 7px 16px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+    white-space: nowrap;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  .slider-group { display: flex; align-items: center; gap: 8px; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 90px; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  @media (max-width: 900px) {
+    footer { gap: 7px; }
+    input[type=range] { width: 70px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Streamlines</b> · flow of F</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="rotation" class="active">rotation</button>
+      <button data-preset="spiralSink">spiral sink</button>
+      <button data-preset="saddle">saddle</button>
+      <button data-preset="doubleWell">double well</button>
+      <button data-preset="pendulum">pendulum</button>
+      <button data-preset="sourcePair">source pair</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>P(x, y) =</label>
+    <input id="customP" type="text" value="-y" placeholder="e.g. -y">
+    <label>Q(x, y) =</label>
+    <input id="customQ" type="text" value="x" placeholder="e.g. x">
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">F = (P, Q) · use <b>x</b>, <b>y</b> · functions: sin, cos, tan, sqrt, log, exp, abs · constants: pi, e · ^ for power</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="main-canvas"></canvas>
+
+    <!-- Overlay top-right -->
+    <div class="overlay" id="overlay">
+      <h2><b>Streamlines · Flow of F</b></h2>
+      <div class="katex-line" id="ov-equation"></div>
+      <div class="field-formula" id="ov-field">F = (−y, x)</div>
+      <div class="caption" id="ov-caption">Pure rotation. Everything circles forever — no escape, no convergence.</div>
+      <div class="readouts">
+        <div class="row"><span class="lbl">stagnation pts</span><span class="val" id="ov-stag">—</span></div>
+        <div class="row"><span class="lbl" id="ov-hover-lbl">hover the canvas:</span></div>
+        <div class="row"><span class="lbl">F(x, y)</span><span class="val" id="ov-fval">—</span></div>
+      </div>
+      <div class="hint">Click anywhere to drop glowing seed particles.</div>
+      <div class="legend">
+        <div><span class="swatch" style="background:var(--gold);"></span>background particles (flow)</div>
+        <div><span class="swatch" style="background:var(--rose);"></span>click-seeded particles (bright)</div>
+        <div><span class="swatch" style="background:rgba(120,200,255,0.8);"></span>stagnation point (fixed point)</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="slider-group">
+      <span class="lbl">Count <b id="lbl-count">200</b></span>
+      <input type="range" id="sl-count" min="50" max="500" step="10" value="200">
+    </div>
+    <div class="slider-group">
+      <span class="lbl">Speed <b id="lbl-speed">1.0×</b></span>
+      <input type="range" id="sl-speed" min="1" max="10" step="1" value="5">
+    </div>
+    <div class="slider-group">
+      <span class="lbl">Trail <b id="lbl-trail">80</b></span>
+      <input type="range" id="sl-trail" min="10" max="200" step="5" value="80">
+    </div>
+    <button class="action" id="btn-playpause">⏸ pause</button>
+    <button class="action ghost" id="btn-reset">↺ respawn all</button>
+    <button class="action ghost" id="btn-arrows">hide arrows</button>
+  </footer>
+
+</div>
+
+<script>
+// =============================================================================
+// HELPERS
+// =============================================================================
+function prettyNumber(v) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 0.001 && a < 10000) {
+    const d = a < 10 ? 2 : 1;
+    return v.toFixed(d);
+  }
+  const exp = Math.floor(Math.log10(a));
+  const mant = v / Math.pow(10, exp);
+  return `${mant.toFixed(2)} × 10<sup>${exp < 0 ? '−' + Math.abs(exp) : exp}</sup>`;
+}
+
+function renderMath(el, latex, displayMode) {
+  if (!el) return;
+  if (window.katex) {
+    try {
+      katex.render(latex, el, { throwOnError: false, displayMode: !!displayMode });
+      return;
+    } catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+function compileExpr(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  for (const [tx, ty] of [[0.5, 0.3], [-0.4, 0.8], [0.1, -0.6]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives a non-number at (${tx}, ${ty})`);
+  }
+  return fn;
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const DOMAIN = 3; // x,y in [-3, 3]
+
+const PRESETS = {
+  rotation: {
+    label: 'rotation',
+    fieldLabel: 'F = (−y, x)',
+    P: (x, y) => -y,
+    Q: (x, y) => x,
+    caption: 'Pure rotation. Everything circles forever — no escape, no convergence.',
+  },
+  spiralSink: {
+    label: 'spiral sink',
+    fieldLabel: 'F = (−x − y, x − y)',
+    P: (x, y) => -x - y,
+    Q: (x, y) =>  x - y,
+    caption: 'Damped vortex. Leaves spiral inward and settle at the origin.',
+  },
+  saddle: {
+    label: 'saddle',
+    fieldLabel: 'F = (x, −y)',
+    P: (x, y) =>  x,
+    Q: (x, y) => -y,
+    caption: 'Saddle. Leaves rush away from the origin along x, pour in along y.',
+  },
+  doubleWell: {
+    label: 'double well',
+    fieldLabel: 'F = (x − x³, −y)',
+    P: (x, y) => x - x * x * x,
+    Q: (x, y) => -y,
+    caption: 'Two stable wells at x = ±1, an unstable peak at x = 0.',
+  },
+  pendulum: {
+    label: 'pendulum',
+    fieldLabel: 'F = (y, −sin x)',
+    P: (x, y) =>  y,
+    Q: (x, y) => -Math.sin(x),
+    caption: 'Pendulum phase portrait. Closed loops = swinging back and forth, open curves = swinging all the way over the top.',
+  },
+  sourcePair: {
+    label: 'source pair',
+    fieldLabel: 'F = two-source field',
+    P: (x, y) => (x - 1) / ((x - 1) * (x - 1) + y * y + 0.1) +
+                 (x + 1) / ((x + 1) * (x + 1) + y * y + 0.1),
+    Q: (x, y) =>  y / ((x - 1) * (x - 1) + y * y + 0.1) +
+                  y / ((x + 1) * (x + 1) + y * y + 0.1),
+    caption: 'Two sources push leaves outward — they meet and shear past each other.',
+  },
+  custom: {
+    label: 'custom',
+    fieldLabel: 'F = (P, Q)',
+    P: (x, y) => -y,
+    Q: (x, y) =>  x,
+    caption: 'Your custom field.',
+  },
+};
+
+let activeKey = 'rotation';
+
+// =============================================================================
+// CANVAS + COORDINATE HELPERS
+// =============================================================================
+const canvas = document.getElementById('main-canvas');
+const ctx    = canvas.getContext('2d');
+const sceneWrap = document.getElementById('scene-wrap');
+
+function resize() {
+  const w = Math.max(120, sceneWrap.clientWidth);
+  const h = Math.max(120, sceneWrap.clientHeight);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width  = w;
+    canvas.height = h;
+  }
+}
+
+function worldToCanvas(wx, wy) {
+  const w = canvas.width, h = canvas.height;
+  const cx = (wx + DOMAIN) / (2 * DOMAIN) * w;
+  const cy = h - (wy + DOMAIN) / (2 * DOMAIN) * h;
+  return [cx, cy];
+}
+function canvasToWorld(cx, cy) {
+  const w = canvas.width, h = canvas.height;
+  const wx = cx / w * (2 * DOMAIN) - DOMAIN;
+  const wy = ((h - cy) / h) * (2 * DOMAIN) - DOMAIN;
+  return [wx, wy];
+}
+
+// =============================================================================
+// STATE
+// =============================================================================
+let playing = true;
+let showArrows = true;
+let N_PARTICLES = 200;
+let SPEED_MULT = 1.0;  // dt multiplier
+let TRAIL_LEN  = 80;
+
+const BASE_DT = 0.016;
+const MAX_SPEED = 5;   // velocity magnitude clamp
+
+// Particles: each { x, y, trail: [{x,y},...], highlighted: bool, life: int }
+let particles = [];
+// Highlighted (click-seeded) particles count toward same pool
+let lastTime = performance.now();
+
+// Stagnation points: [{wx, wy}]
+let stagPoints = [];
+
+// Hover position in world coords
+let hoverWX = null, hoverWY = null;
+
+// =============================================================================
+// PARTICLE MANAGEMENT
+// =============================================================================
+function randomSeed() {
+  return {
+    x: (Math.random() * 2 - 1) * DOMAIN,
+    y: (Math.random() * 2 - 1) * DOMAIN,
+  };
+}
+
+function makeParticle(wx, wy, highlighted) {
+  return {
+    x: wx, y: wy,
+    trail: [{ x: wx, y: wy }],
+    highlighted: !!highlighted,
+    life: 0,
+  };
+}
+
+function spawnAll() {
+  particles = [];
+  for (let i = 0; i < N_PARTICLES; i++) {
+    const s = randomSeed();
+    particles.push(makeParticle(s.x, s.y, false));
+  }
+}
+
+function stepParticle(p, preset, dt) {
+  let vx = preset.P(p.x, p.y);
+  let vy = preset.Q(p.x, p.y);
+  if (!isFinite(vx) || !isFinite(vy)) { vx = 0; vy = 0; }
+
+  // Clamp speed
+  const spd = Math.sqrt(vx * vx + vy * vy);
+  if (spd > MAX_SPEED) {
+    const s = MAX_SPEED / spd;
+    vx *= s; vy *= s;
+  }
+
+  p.x += vx * dt;
+  p.y += vy * dt;
+  p.life++;
+
+  // Trim and record trail
+  p.trail.push({ x: p.x, y: p.y });
+  if (p.trail.length > TRAIL_LEN) {
+    p.trail.splice(0, p.trail.length - TRAIL_LEN);
+  }
+
+  // Respawn if outside domain
+  if (Math.abs(p.x) > DOMAIN * 1.05 || Math.abs(p.y) > DOMAIN * 1.05) {
+    if (p.highlighted) {
+      // Highlighted particles don't auto-respawn; mark for removal
+      return false;
+    }
+    const s = randomSeed();
+    p.x = s.x; p.y = s.y;
+    p.trail = [{ x: p.x, y: p.y }];
+    p.life  = 0;
+  }
+  return true;
+}
+
+function stepAll(dt, preset) {
+  const keep = [];
+  for (const p of particles) {
+    if (stepParticle(p, preset, dt)) {
+      keep.push(p);
+    }
+  }
+  particles = keep;
+
+  // Ensure we always have at least N_PARTICLES non-highlighted particles
+  const bgCount = particles.filter(p => !p.highlighted).length;
+  for (let i = bgCount; i < N_PARTICLES; i++) {
+    const s = randomSeed();
+    particles.push(makeParticle(s.x, s.y, false));
+  }
+}
+
+// =============================================================================
+// STAGNATION POINT DETECTION
+// =============================================================================
+const STAG_GRID = 30;
+const STAG_THRESHOLD = 0.15;
+const STAG_CLUSTER_DIST = 0.35; // world units — merge nearby detections
+
+function detectStagnation(preset) {
+  const candidates = [];
+  const step = (2 * DOMAIN) / (STAG_GRID - 1);
+  for (let j = 0; j < STAG_GRID; j++) {
+    for (let i = 0; i < STAG_GRID; i++) {
+      const wx = -DOMAIN + step * i;
+      const wy = -DOMAIN + step * j;
+      const px = preset.P(wx, wy);
+      const py = preset.Q(wx, wy);
+      if (!isFinite(px) || !isFinite(py)) continue;
+      const mag = Math.sqrt(px * px + py * py);
+      if (mag < STAG_THRESHOLD) {
+        candidates.push({ wx, wy, mag });
+      }
+    }
+  }
+
+  // Cluster: greedily merge points closer than STAG_CLUSTER_DIST
+  const clusters = [];
+  const used = new Array(candidates.length).fill(false);
+  for (let i = 0; i < candidates.length; i++) {
+    if (used[i]) continue;
+    const c = candidates[i];
+    let sumX = c.wx, sumY = c.wy, cnt = 1;
+    for (let j = i + 1; j < candidates.length; j++) {
+      if (used[j]) continue;
+      const d = Math.hypot(candidates[j].wx - c.wx, candidates[j].wy - c.wy);
+      if (d < STAG_CLUSTER_DIST) {
+        sumX += candidates[j].wx;
+        sumY += candidates[j].wy;
+        cnt++;
+        used[j] = true;
+      }
+    }
+    used[i] = true;
+    clusters.push({ wx: sumX / cnt, wy: sumY / cnt });
+  }
+  stagPoints = clusters;
+}
+
+// =============================================================================
+// DRAWING
+// =============================================================================
+
+// Arrow grid (background, muted)
+function drawArrowGrid(preset) {
+  const NGRID = 14;
+  const step = (2 * DOMAIN) / (NGRID - 1);
+
+  // Find max magnitude for normalization
+  let maxMag = 0;
+  for (let j = 0; j < NGRID; j++) {
+    for (let i = 0; i < NGRID; i++) {
+      const wx = -DOMAIN + step * i;
+      const wy = -DOMAIN + step * j;
+      const vx = preset.P(wx, wy), vy = preset.Q(wx, wy);
+      if (!isFinite(vx) || !isFinite(vy)) continue;
+      const m = Math.sqrt(vx * vx + vy * vy);
+      if (m > maxMag) maxMag = m;
+    }
+  }
+  if (maxMag < 1e-12) maxMag = 1;
+
+  const cellPx = canvas.width / NGRID;
+  const halfCell = cellPx * 0.38;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(122, 135, 148, 0.30)';
+  ctx.lineWidth = 1;
+
+  for (let j = 0; j < NGRID; j++) {
+    for (let i = 0; i < NGRID; i++) {
+      const wx = -DOMAIN + step * i;
+      const wy = -DOMAIN + step * j;
+      let vx = preset.P(wx, wy), vy = preset.Q(wx, wy);
+      if (!isFinite(vx) || !isFinite(vy)) continue;
+      const mag = Math.sqrt(vx * vx + vy * vy);
+      if (mag < 1e-12) continue;
+      const ux = vx / mag, uy = vy / mag;
+      const scale = (mag / maxMag) * halfCell;
+
+      const [cx, cy] = worldToCanvas(wx, wy);
+      const ex = cx + ux * scale;
+      const ey = cy - uy * scale;
+      const sx = cx - ux * scale * 0.45;
+      const sy = cy + uy * scale * 0.45;
+
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      const headLen = scale * 0.38;
+      const angle = Math.atan2(-(ey - sy), ex - sx);
+      ctx.lineTo(ex - headLen * Math.cos(angle - 0.45), ey - headLen * Math.sin(angle - 0.45));
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - headLen * Math.cos(angle + 0.45), ey - headLen * Math.sin(angle + 0.45));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// Axes
+function drawAxes() {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(90,100,112,0.4)';
+  ctx.lineWidth = 1;
+
+  const [ax0, ay0] = worldToCanvas(-DOMAIN, 0);
+  const [ax1, ay1] = worldToCanvas(DOMAIN, 0);
+  ctx.beginPath(); ctx.moveTo(ax0, ay0); ctx.lineTo(ax1, ay1); ctx.stroke();
+
+  const [bx0, by0] = worldToCanvas(0, -DOMAIN);
+  const [bx1, by1] = worldToCanvas(0, DOMAIN);
+  ctx.beginPath(); ctx.moveTo(bx0, by0); ctx.lineTo(bx1, by1); ctx.stroke();
+  ctx.restore();
+}
+
+// Draw a single particle + its trail
+function drawParticle(p) {
+  if (p.trail.length < 2) return;
+
+  const highlighted = p.highlighted;
+  const trailLen = p.trail.length;
+
+  // Draw trail as segments fading from tail to head
+  for (let i = 1; i < trailLen; i++) {
+    const t0 = p.trail[i - 1];
+    const t1 = p.trail[i];
+    // Opacity: rises from 0 at oldest to 1 at newest
+    const frac = i / (trailLen - 1);
+    const alpha = highlighted
+      ? frac * 0.88
+      : frac * 0.45;
+
+    // Color: gold for normal, rose for highlighted; both fade with age
+    let r, g, b;
+    if (highlighted) {
+      // Bright gold → rose gradient along trail
+      r = Math.round(255 * (frac * 0.8 + 0.2));
+      g = Math.round(50 + 160 * (1 - frac));
+      b = Math.round(100 * frac + 80 * (1 - frac));
+    } else {
+      // Gold (#ffd166)
+      r = 255; g = 209; b = 102;
+    }
+
+    const [x0, y0] = worldToCanvas(t0.x, t0.y);
+    const [x1, y1] = worldToCanvas(t1.x, t1.y);
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+    ctx.lineWidth = highlighted ? 2 : 1.2;
+    ctx.stroke();
+  }
+
+  // Draw the particle dot at the head
+  const head = p.trail[trailLen - 1];
+  const [hx, hy] = worldToCanvas(head.x, head.y);
+
+  ctx.save();
+  if (highlighted) {
+    ctx.shadowColor = 'rgba(255,126,182,0.9)';
+    ctx.shadowBlur  = 10;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff7eb6';
+    ctx.fill();
+  } else {
+    ctx.shadowColor = 'rgba(255,209,102,0.6)';
+    ctx.shadowBlur  = 6;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// Draw stagnation points
+function drawStagPoints() {
+  for (const sp of stagPoints) {
+    const [cx, cy] = worldToCanvas(sp.wx, sp.wy);
+
+    // Outer ring
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120,200,255,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner dot
+    ctx.fillStyle = 'rgba(120,200,255,0.85)';
+    ctx.shadowColor = 'rgba(100,180,255,0.8)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+// Draw hover crosshair
+function drawHover() {
+  if (hoverWX === null) return;
+  const [hx, hy] = worldToCanvas(hoverWX, hoverWY);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.moveTo(hx, 0); ctx.lineTo(hx, canvas.height);
+  ctx.moveTo(0, hy); ctx.lineTo(canvas.width, hy);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// =============================================================================
+// FULL FRAME
+// =============================================================================
+function draw(preset) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0e1116';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  drawAxes();
+  if (showArrows) drawArrowGrid(preset);
+
+  // Draw background particles first, then highlighted on top
+  const bg = particles.filter(p => !p.highlighted);
+  const hi = particles.filter(p =>  p.highlighted);
+  for (const p of bg) drawParticle(p);
+  for (const p of hi) drawParticle(p);
+
+  drawStagPoints();
+  drawHover();
+}
+
+// =============================================================================
+// OVERLAY UPDATE
+// =============================================================================
+function updateOverlay(preset) {
+  document.getElementById('ov-field').textContent = preset.fieldLabel;
+  document.getElementById('ov-caption').textContent = preset.caption;
+  document.getElementById('ov-stag').textContent =
+    stagPoints.length === 0 ? 'none found' :
+    stagPoints.length === 1 ? '1 found'    :
+    `${stagPoints.length} found`;
+
+  // Hover readout
+  if (hoverWX !== null) {
+    const vx = preset.P(hoverWX, hoverWY);
+    const vy = preset.Q(hoverWX, hoverWY);
+    const xs = hoverWX.toFixed(2), ys = hoverWY.toFixed(2);
+    const vxs = prettyNumber(vx), vys = prettyNumber(vy);
+    document.getElementById('ov-hover-lbl').innerHTML =
+      `hover at (${xs}, ${ys}):`;
+    document.getElementById('ov-fval').innerHTML =
+      `⟨${vxs}, ${vys}⟩`;
+  } else {
+    document.getElementById('ov-hover-lbl').textContent = 'hover the canvas:';
+    document.getElementById('ov-fval').textContent = '—';
+  }
+}
+
+// =============================================================================
+// ANIMATION LOOP
+// =============================================================================
+function tick() {
+  const now = performance.now();
+  const rawDt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  resize();
+  const preset = PRESETS[activeKey];
+
+  if (playing) {
+    const dt = BASE_DT * SPEED_MULT;
+    stepAll(dt, preset);
+  }
+
+  draw(preset);
+  updateOverlay(preset);
+  requestAnimationFrame(tick);
+}
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+// Slider: count
+const slCount = document.getElementById('sl-count');
+slCount.addEventListener('input', () => {
+  N_PARTICLES = +slCount.value;
+  document.getElementById('lbl-count').textContent = N_PARTICLES;
+  // trim or grow background particles
+  const bg = particles.filter(p => !p.highlighted);
+  const hi = particles.filter(p =>  p.highlighted);
+  if (bg.length > N_PARTICLES) {
+    particles = [...bg.slice(0, N_PARTICLES), ...hi];
+  } else {
+    while (bg.length < N_PARTICLES) {
+      const s = randomSeed();
+      bg.push(makeParticle(s.x, s.y, false));
+    }
+    particles = [...bg, ...hi];
+  }
+});
+
+// Slider: speed
+const slSpeed = document.getElementById('sl-speed');
+slSpeed.addEventListener('input', () => {
+  // map 1..10 → 0.2×..3.0×
+  const v = +slSpeed.value;
+  SPEED_MULT = 0.2 + (v - 1) / 9 * 2.8;
+  document.getElementById('lbl-speed').textContent = SPEED_MULT.toFixed(1) + '×';
+});
+// Initialize label
+{
+  const v = +slSpeed.value;
+  SPEED_MULT = 0.2 + (v - 1) / 9 * 2.8;
+  document.getElementById('lbl-speed').textContent = SPEED_MULT.toFixed(1) + '×';
+}
+
+// Slider: trail
+const slTrail = document.getElementById('sl-trail');
+slTrail.addEventListener('input', () => {
+  TRAIL_LEN = +slTrail.value;
+  document.getElementById('lbl-trail').textContent = TRAIL_LEN;
+  // Trim existing trails
+  for (const p of particles) {
+    if (p.trail.length > TRAIL_LEN) {
+      p.trail.splice(0, p.trail.length - TRAIL_LEN);
+    }
+  }
+});
+
+// Play/Pause
+document.getElementById('btn-playpause').addEventListener('click', function () {
+  playing = !playing;
+  if (playing) lastTime = performance.now();
+  this.textContent = playing ? '⏸ pause' : '▶ play';
+});
+
+// Reset
+document.getElementById('btn-reset').addEventListener('click', () => {
+  spawnAll();
+});
+
+// Arrows toggle
+document.getElementById('btn-arrows').addEventListener('click', function () {
+  showArrows = !showArrows;
+  this.textContent = showArrows ? 'hide arrows' : 'show arrows';
+});
+
+// Preset switching
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    document.getElementById('customForm').classList.toggle('shown', activeKey === 'custom');
+    spawnAll();
+    detectStagnation(PRESETS[activeKey]);
+  });
+});
+
+// Custom apply
+document.getElementById('customApply').addEventListener('click', applyCustom);
+['customP', 'customQ'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyCustom();
+  });
+});
+function applyCustom() {
+  const err = document.getElementById('customError');
+  err.textContent = '';
+  let P, Q;
+  try { P = compileExpr(document.getElementById('customP').value); }
+  catch (e) { err.textContent = 'P: ' + e.message; return; }
+  try { Q = compileExpr(document.getElementById('customQ').value); }
+  catch (e) { err.textContent = 'Q: ' + e.message; return; }
+  const rawP = document.getElementById('customP').value.trim();
+  const rawQ = document.getElementById('customQ').value.trim();
+  PRESETS.custom = {
+    label: 'custom',
+    fieldLabel: `F = (${rawP}, ${rawQ})`,
+    P, Q,
+    caption: 'Your custom field.',
+  };
+  if (activeKey !== 'custom') {
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === 'custom'));
+    activeKey = 'custom';
+    document.getElementById('customForm').classList.add('shown');
+  }
+  spawnAll();
+  detectStagnation(PRESETS.custom);
+}
+
+// Click to seed highlighted particles
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * (canvas.width  / rect.width);
+  const cy = (e.clientY - rect.top)  * (canvas.height / rect.height);
+  const [wx, wy] = canvasToWorld(cx, cy);
+
+  // Drop 30 highlighted particles in a small cloud around the click point
+  const SEED_N = 30;
+  for (let i = 0; i < SEED_N; i++) {
+    const jitter = 0.08;
+    const sx = wx + (Math.random() * 2 - 1) * jitter;
+    const sy = wy + (Math.random() * 2 - 1) * jitter;
+    particles.push(makeParticle(sx, sy, true));
+  }
+});
+
+// Hover readout
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * (canvas.width  / rect.width);
+  const cy = (e.clientY - rect.top)  * (canvas.height / rect.height);
+  [hoverWX, hoverWY] = canvasToWorld(cx, cy);
+});
+canvas.addEventListener('mouseleave', () => { hoverWX = null; hoverWY = null; });
+
+// =============================================================================
+// SELF-TEST
+// =============================================================================
+(() => {
+  const rot = { P: (x, y) => -y, Q: (x, y) => x };
+  // Starting at (1, 0), one Euler step with dt=0.01 should give (1, 0.01)
+  const dt = 0.01;
+  const px = 1, py = 0;
+  const nx = px + dt * rot.P(px, py);
+  const ny = py + dt * rot.Q(px, py);
+  console.assert(Math.abs(nx - 1) < 1e-9 && Math.abs(ny - 0.01) < 1e-9,
+    `[streamlines] rotation Euler step FAILED: got (${nx}, ${ny}), expected (1, 0.01)`);
+
+  // Stagnation at origin for rotation
+  console.assert(Math.hypot(rot.P(0, 0), rot.Q(0, 0)) < 1e-9,
+    '[streamlines] rotation stagnation at origin FAILED');
+
+  // Saddle: at (1, 0), F = (1, 0) — particle moves right
+  const saddle = { P: (x, y) => x, Q: (x, y) => -y };
+  const svx = saddle.P(1, 0), svy = saddle.Q(1, 0);
+  console.assert(Math.abs(svx - 1) < 1e-9 && Math.abs(svy) < 1e-9,
+    `[streamlines] saddle velocity at (1,0) FAILED: got (${svx}, ${svy})`);
+
+  // Velocity clamp: |F| > MAX_SPEED should clip
+  const bigV = 100;
+  const spd  = Math.sqrt(bigV * bigV + bigV * bigV);
+  const scale = MAX_SPEED / spd;
+  const clipped = bigV * scale;
+  console.assert(Math.hypot(clipped, clipped) <= MAX_SPEED + 1e-9,
+    '[streamlines] velocity clamp FAILED');
+
+  console.log('[streamlines] all 4 tests passed');
+})();
+
+// =============================================================================
+// BOOT
+// =============================================================================
+window.addEventListener('load', () => {
+  renderMath(
+    document.getElementById('ov-equation'),
+    '\\dfrac{d\\vec{r}}{dt} = \\vec{F}(\\vec{r})',
+    false
+  );
+});
+// Also try immediately in case KaTeX already loaded
+renderMath(
+  document.getElementById('ov-equation'),
+  '\\dfrac{d\\vec{r}}{dt} = \\vec{F}(\\vec{r})',
+  false
+);
+
+resize();
+spawnAll();
+detectStagnation(PRESETS[activeKey]);
+lastTime = performance.now();
+requestAnimationFrame(tick);
+
+// Inspection hooks
+window.__state    = () => ({ activeKey, playing, N_PARTICLES, SPEED_MULT, TRAIL_LEN, stagPoints, particles: particles.length });
+window.__rebuild  = () => { spawnAll(); detectStagnation(PRESETS[activeKey]); };
+window.__stag     = () => stagPoints;
+window.__fieldAt  = (x, y) => ({ vx: PRESETS[activeKey].P(x, y), vy: PRESETS[activeKey].Q(x, y) });
+</script>
+</body>
+</html>

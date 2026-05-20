@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tangent Plane · Linear Approximation Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin every direct child — #customForm toggles display:none; without explicit
+     grid-row, scene-wrap shifts up and collapses to 1px. */
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; position: relative; overflow: hidden; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 180px;
+  }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp  { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  #scene-wrap canvas {
+    display: block; width: 100% !important; height: 100% !important;
+    position: absolute; inset: 0;
+  }
+
+  /* Overlay — top-right */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 340px;
+    z-index: 2;
+  }
+  .overlay h2 { margin: 0 0 3px; font-size: 15px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula-main { margin: 2px 0 6px; }
+  .overlay .formula-main .katex { font-size: 0.97em; }
+  .overlay .f-formula { color: var(--soft); font-size: 12px; font-style: italic; margin-bottom: 6px; }
+  .overlay .f-formula .katex { font-size: 1.0em; }
+  .readouts {
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; margin-top: 4px;
+    line-height: 1.75;
+  }
+  .readouts .lbl { color: var(--soft); }
+  .readouts .val { color: var(--gold); }
+  .readouts .highlight { color: var(--rose); font-weight: bold; }
+  .readouts .diff-lbl { color: var(--soft); font-size: 10.5px; font-style: italic; }
+
+  /* Example-point block */
+  .example-block {
+    border-top: 1px solid var(--pill-border);
+    margin-top: 8px; padding-top: 8px;
+    font-family: "Courier New", monospace; font-size: 11px;
+    line-height: 1.8;
+  }
+  .example-block .ex-title {
+    color: var(--soft); font-style: italic; margin-bottom: 3px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  .example-block .ex-true { color: var(--gold); }
+  .example-block .ex-pred { color: var(--blue); }
+  .example-block .ex-diff { color: var(--rose); font-weight: bold; }
+
+  .legend {
+    font-size: 11px; color: var(--soft); margin-top: 8px;
+    border-top: 1px solid var(--pill-border); padding-top: 8px; line-height: 1.65;
+  }
+  .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  /* Caption bottom-center */
+  #caption {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 22, 0.78); border: 1px solid var(--pill-border);
+    border-radius: 8px; padding: 7px 16px;
+    font-size: 12.5px; color: var(--soft); text-align: center;
+    pointer-events: none; max-width: 90%; z-index: 2;
+    font-style: italic;
+  }
+
+  /* Footer */
+  footer {
+    padding: 10px 24px; display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto 1fr auto 1fr auto;
+    gap: 8px 12px; align-items: center;
+    border-top: 1px solid var(--pill-border);
+  }
+  footer .lbl { color: var(--soft); font-size: 13px; white-space: nowrap; }
+  footer .lbl b { color: var(--ink); font-family: "Courier New", monospace; font-weight: normal; }
+  footer .actions { display: flex; gap: 8px; align-items: center; grid-column: 9; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 7px 16px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  button.action.toggle-active { background: var(--blue); color: #fff; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+
+  /* Floating labels that follow world-space points */
+  .label3d {
+    position: absolute;
+    background: rgba(14, 17, 22, 0.88);
+    border: 1px solid rgba(255, 209, 102, 0.45);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-family: "Courier New", monospace;
+    font-style: italic;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    z-index: 5;
+    color: var(--gold);
+  }
+  .label3d.rose {
+    color: var(--rose);
+    border-color: rgba(255, 126, 182, 0.45);
+  }
+  .label3d.blue {
+    color: var(--blue);
+    border-color: rgba(106, 169, 255, 0.45);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Tangent Plane</b> · Linear approximation of z = f(x, y)</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="bowl"  class="active">smooth bowl</button>
+      <button data-preset="sine">sine wave</button>
+      <button data-preset="saddle">saddle</button>
+      <button data-preset="cliff">steep cliff</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>f(x, y) =</label>
+    <input id="customExpr" type="text" value="x^2 + y^2" placeholder="e.g. sin(x)*cos(y)">
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b> and <b>y</b> &nbsp;·&nbsp; functions: sin, cos, tan, sqrt, log, exp, abs, atan &nbsp;·&nbsp; ^ for power &nbsp;·&nbsp; pi, e</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="canvas"></canvas>
+
+    <div class="overlay">
+      <h2><b>Tangent Plane</b> · Linear approximation</h2>
+      <div class="formula-main" id="ovFormula"></div>
+      <div class="f-formula" id="ovFFormula"></div>
+
+      <div class="readouts">
+        <div>
+          <span class="lbl">Probe (a, b) = </span>
+          <span class="val" id="ovAB">(0.00, 0.00)</span>
+        </div>
+        <div>
+          <span class="lbl">f(a, b)&nbsp;&nbsp;&nbsp;&nbsp;= </span>
+          <span class="val" id="ovFab">0.00</span>
+        </div>
+        <div>
+          <span class="lbl">f<sub>x</sub>(a,b)&nbsp;&nbsp;= </span>
+          <span class="val" id="ovFx">0.00</span>
+          <span class="lbl" style="margin-left:8px; font-size:10.5px;">(slope in x)</span>
+        </div>
+        <div>
+          <span class="lbl">f<sub>y</sub>(a,b)&nbsp;&nbsp;= </span>
+          <span class="val" id="ovFy">0.00</span>
+          <span class="lbl" style="margin-left:8px; font-size:10.5px;">(slope in y)</span>
+        </div>
+      </div>
+
+      <div class="example-block">
+        <div class="ex-title">Example point: (a+0.3, b+0.3)</div>
+        <div>
+          <span class="lbl">true f&nbsp;&nbsp;&nbsp;&nbsp;= </span>
+          <span class="ex-true" id="ovExTrue">—</span>
+        </div>
+        <div>
+          <span class="lbl">predicted = </span>
+          <span class="ex-pred" id="ovExPred">—</span>
+        </div>
+        <div>
+          <span class="lbl">error&nbsp;&nbsp;&nbsp;&nbsp; = </span>
+          <span class="ex-diff" id="ovExDiff">—</span>
+          <span class="diff-lbl" id="ovExPct"></span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div><span class="swatch" style="background:rgba(106,169,255,0.5); border:1px solid #6aa9ff;"></span>surface z = f(x, y)</div>
+        <div><span class="swatch" style="background:rgba(255,126,182,0.45); border:1px solid #ff7eb6;"></span>tangent plane (flat approximation)</div>
+        <div><span class="swatch" style="background:var(--blue);"></span>f<sub>x</sub> rail — slope in x-direction</div>
+        <div><span class="swatch" style="background:var(--rose);"></span>f<sub>y</sub> rail — slope in y-direction</div>
+        <div><span class="swatch" style="background:rgba(255,209,102,0.35);"></span>error tube — gap between plane and surface</div>
+        <div style="margin-top:4px; font-style:italic;">drag to rotate · scroll to zoom</div>
+      </div>
+    </div>
+
+    <div id="caption">Move the probe closer to the surface peak and watch the error shrink — zoom in and the plane fits perfectly.</div>
+  </div>
+
+  <footer>
+    <span class="lbl">a = <b id="lblA">0.00</b></span>
+    <input type="range" id="sliderA" min="-2500" max="2500" value="0" step="5">
+    <span class="lbl">b = <b id="lblB">0.00</b></span>
+    <input type="range" id="sliderB" min="-2500" max="2500" value="0" step="5">
+    <span class="lbl">ε neighborhood = <b id="lblEps">0.10</b></span>
+    <input type="range" id="sliderEps" min="0" max="500" value="100" step="5">
+    <span class="lbl"></span>
+    <span></span>
+    <div class="actions">
+      <button class="action ghost" id="btnHideSurface">hide surface</button>
+      <button class="action ghost" id="btnReset">↺ reset view</button>
+    </div>
+  </footer>
+</div>
+
+<!-- Floating labels for fx/fy rail tips -->
+<span class="label3d blue" id="lblFx" style="opacity:0">fₓ = —</span>
+<span class="label3d rose" id="lblFy" style="opacity:0">f_y = —</span>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+function prettyNumber(v) {
+  const av = Math.abs(v);
+  if (!isFinite(v)) return '?';
+  if (av === 0) return '0';
+  if (av >= 0.001 && av < 9999) return v.toFixed(4);
+  const exp = Math.floor(Math.log10(av));
+  const mantissa = (v / Math.pow(10, exp)).toFixed(2);
+  return `${mantissa} &times; 10<sup>${exp}</sup>`;
+}
+
+function renderMath(el, latex, displayMode) {
+  if (window.katex) {
+    try {
+      katex.render(latex, el, { throwOnError: false, displayMode: !!displayMode });
+      return;
+    } catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+// =============================================================================
+// PARTIAL DERIVATIVES — central differences, h = 1e-4
+// =============================================================================
+const H = 1e-4;
+
+function partial(f, axis, a, b) {
+  if (axis === 'x') return (f(a + H, b) - f(a - H, b)) / (2 * H);
+  return (f(a, b + H) - f(a, b - H)) / (2 * H);
+}
+
+function linearApprox(f, a, b, x, y) {
+  const fab = f(a, b);
+  const fx  = partial(f, 'x', a, b);
+  const fy  = partial(f, 'y', a, b);
+  return fab + fx * (x - a) + fy * (y - b);
+}
+
+// =============================================================================
+// EXPRESSION COMPILER — safe new Function approach
+// =============================================================================
+function compileF(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)([a-wyz(])/g, '$1*$2');   // implicit multiply: 2x, 3(x+y)
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b(?![a-zA-Z])/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  for (const [tx, ty] of [[0.5, 0.5], [-0.7, 1.2], [0, 0]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives a non-number at (${tx}, ${ty})`);
+  }
+  return fn;
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PRESETS = {
+  bowl: {
+    label: 'smooth bowl',
+    latex: 'f(x, y) = x^2 + y^2',
+    f: (x, y) => x * x + y * y,
+    caption: 'A bowl. The tangent plane tilts wherever you move the probe — flat at the bottom, steep near the rim.',
+  },
+  sine: {
+    label: 'sine wave',
+    latex: 'f(x, y) = \\sin(x) + \\cos(y)',
+    f: (x, y) => Math.sin(x) + Math.cos(y),
+    caption: 'Hills and valleys. At every peak and trough, both partial derivatives are zero — the plane goes flat.',
+  },
+  saddle: {
+    label: 'saddle',
+    latex: 'f(x, y) = x^2 - y^2',
+    f: (x, y) => x * x - y * y,
+    caption: 'Saddle surface. At the origin, fₓ = fy = 0, so the tangent plane is flat — but the surface still curves in opposite directions.',
+  },
+  cliff: {
+    label: 'steep cliff',
+    latex: 'f(x, y) = \\arctan(2x) - 0.3y',
+    f: (x, y) => Math.atan(2 * x) - 0.3 * y,
+    caption: 'A cliff face. Right at the steep edge, fₓ is large and the plane tilts sharply. Move away from x = 0 and the slope relaxes.',
+  },
+  custom: {
+    label: 'custom',
+    latex: 'f(x, y) = x^2 + y^2',
+    f: (x, y) => x * x + y * y,
+    caption: 'Custom function. Drag the probe around to explore the tangent plane.',
+  },
+};
+
+let activeKey = 'bowl';
+
+// =============================================================================
+// THREE.JS SETUP
+// =============================================================================
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+camera.up.set(0, 0, 1);
+camera.position.set(5, -6, 5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x1a1f28, 0.85));
+scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+const camLight = new THREE.DirectionalLight(0xffffff, 0.65);
+camLight.position.set(0.3, 0.5, 1);
+camera.add(camLight);
+scene.add(camera);  // required so camera-parented light moves with camera
+
+const stage = new THREE.Group();
+scene.add(stage);
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const o = g.children[g.children.length - 1];
+    g.remove(o);
+    o.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
+}
+
+// =============================================================================
+// STATE
+// =============================================================================
+let probeA  = 0.5;
+let probeB  = 0.5;
+let epsilonVal = 0.10;
+let hideSurface = false;
+let probeLabelPositions = { fxTip: null, fyTip: null };
+
+// =============================================================================
+// GRADIENT — blue-low → gold-high
+// =============================================================================
+const GRAD = ['#0d2050', '#1a4a9e', '#3a7bd5', '#c876b2', '#ffd166'];
+function gradColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const n = GRAD.length - 1;
+  const seg = t * n;
+  const i = Math.min(n - 1, Math.floor(seg));
+  const frac = seg - i;
+  return new THREE.Color().lerpColors(new THREE.Color(GRAD[i]), new THREE.Color(GRAD[i + 1]), frac);
+}
+
+// =============================================================================
+// BUILD SURFACE MESH (z = f(x,y), x,y ∈ [-3, 3], 80×80 grid)
+// =============================================================================
+const DOMAIN = 3;   // x,y ∈ [-DOMAIN, DOMAIN]
+const N = 80;
+
+function buildSurfaceMesh(f) {
+  const positions = new Float32Array(N * N * 3);
+  const colors    = new Float32Array(N * N * 3);
+  let zMin = Infinity, zMax = -Infinity;
+
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = -DOMAIN + 2 * DOMAIN * i / (N - 1);
+      const y = -DOMAIN + 2 * DOMAIN * j / (N - 1);
+      const z = f(x, y);
+      const k = (j * N + i) * 3;
+      positions[k]     = x;
+      positions[k + 1] = y;
+      positions[k + 2] = isFinite(z) ? z : 0;
+      if (isFinite(z)) { zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); }
+    }
+  }
+  const zSpan = Math.max(1e-9, zMax - zMin);
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const k = (j * N + i) * 3;
+      const c = gradColor((positions[k + 2] - zMin) / zSpan);
+      colors[k]     = c.r;
+      colors[k + 1] = c.g;
+      colors[k + 2] = c.b;
+    }
+  }
+  const indices = [];
+  for (let j = 0; j < N - 1; j++) {
+    for (let i = 0; i < N - 1; i++) {
+      const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
+      indices.push(a, b, d, a, d, c);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  return { geom, zMin, zMax };
+}
+
+// =============================================================================
+// TANGENT PLANE SQUARE
+// Orient a 1.5×1.5 square so its normal aligns with n = (-fx, -fy, 1) / |·|
+// =============================================================================
+function buildTangentPlane(a, b, fab, fx, fy) {
+  const size = 1.5;
+  // Normal direction: graph surface normal is proportional to (-fx, -fy, 1)
+  const nx = -fx, ny = -fy, nz = 1;
+  const nLen = Math.sqrt(nx * nx + ny * ny + nz * nz);
+  const nHat = new THREE.Vector3(nx / nLen, ny / nLen, nz / nLen);
+
+  const planeGeom = new THREE.PlaneGeometry(size, size);
+  const planeMat  = new THREE.MeshBasicMaterial({
+    color: 0xff7eb6, transparent: true, opacity: 0.32,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const planeMesh = new THREE.Mesh(planeGeom, planeMat);
+
+  // Default PlaneGeometry normal is (0, 0, 1); rotate to nHat
+  const defaultNorm = new THREE.Vector3(0, 0, 1);
+  if (Math.abs(nHat.dot(defaultNorm) - 1) > 1e-9) {
+    const q = new THREE.Quaternion().setFromUnitVectors(defaultNorm, nHat);
+    planeMesh.quaternion.copy(q);
+  }
+  planeMesh.position.set(a, b, fab);
+
+  // Border edges — 4 corners rotated same as mesh
+  const halfS = size / 2;
+  const corners = [
+    new THREE.Vector3(-halfS, -halfS, 0),
+    new THREE.Vector3( halfS, -halfS, 0),
+    new THREE.Vector3( halfS,  halfS, 0),
+    new THREE.Vector3(-halfS,  halfS, 0),
+  ];
+  const borderPts = [...corners, corners[0]];
+  const borderGeom = new THREE.BufferGeometry().setFromPoints(borderPts);
+  const borderMat  = new THREE.LineBasicMaterial({ color: 0xff7eb6, transparent: true, opacity: 0.75 });
+  const border = new THREE.Line(borderGeom, borderMat);
+  border.quaternion.copy(planeMesh.quaternion);
+  border.position.copy(planeMesh.position).addScaledVector(nHat, 0.003);
+
+  const g = new THREE.Group();
+  g.add(planeMesh);
+  g.add(border);
+  return g;
+}
+
+// =============================================================================
+// SLOPE RAILS (one blue for fx, one rose for fy)
+// Each rail is a line segment of length 1.2 in the respective direction,
+// lying in the tangent plane.
+// =============================================================================
+function buildSlopeRails(a, b, fab, fx, fy) {
+  const RAIL_LEN = 1.2;
+  const g = new THREE.Group();
+
+  // f_x rail: moves along x, z rises by fx per unit
+  // start at probe, end at (a + RAIL_LEN, b, fab + fx*RAIL_LEN)
+  const fxStart = new THREE.Vector3(a, b, fab);
+  const fxEnd   = new THREE.Vector3(a + RAIL_LEN, b, fab + fx * RAIL_LEN);
+  const fxGeom  = new THREE.BufferGeometry().setFromPoints([fxStart, fxEnd]);
+  const fxMat   = new THREE.LineBasicMaterial({ color: 0x6aa9ff });
+  g.add(new THREE.Line(fxGeom, fxMat));
+
+  // Arrow head for fx
+  g.add(makeArrowHead(fxStart, fxEnd, 0x6aa9ff));
+
+  // f_y rail
+  const fyStart = new THREE.Vector3(a, b, fab);
+  const fyEnd   = new THREE.Vector3(a, b + RAIL_LEN, fab + fy * RAIL_LEN);
+  const fyGeom  = new THREE.BufferGeometry().setFromPoints([fyStart, fyEnd]);
+  const fyMat   = new THREE.LineBasicMaterial({ color: 0xff7eb6 });
+  g.add(new THREE.Line(fyGeom, fyMat));
+  g.add(makeArrowHead(fyStart, fyEnd, 0xff7eb6));
+
+  // Store tip positions for floating labels
+  g.userData.fxTip = fxEnd.clone();
+  g.userData.fyTip = fyEnd.clone();
+
+  return g;
+}
+
+function makeArrowHead(from, to, color) {
+  const dir = to.clone().sub(from);
+  const len = dir.length();
+  if (len < 1e-9) return new THREE.Group();
+  const headLen = Math.min(0.1, len * 0.22);
+  const headGeom = new THREE.ConeGeometry(0.025, headLen, 8);
+  const headMat  = new THREE.MeshBasicMaterial({ color });
+  const head = new THREE.Mesh(headGeom, headMat);
+  const axis = new THREE.Vector3(0, 1, 0);
+  const normDir = dir.clone().normalize();
+  head.quaternion.setFromUnitVectors(axis, normDir);
+  head.position.copy(to).sub(normDir.clone().multiplyScalar(headLen / 2));
+  const g = new THREE.Group();
+  g.add(head);
+  return g;
+}
+
+// =============================================================================
+// ERROR TUBE — faint gold region where |f(x,y) - plane(x,y)| < ε
+// Sampled as a mesh of small vertical bars above/below the tangent plane
+// wherever the surface is within ε.  We draw two meshes: one at the surface
+// itself (clamped to points where error < ε) and a matching plane at those
+// same (x,y) — the gap between them shows the billow.
+// =============================================================================
+function buildErrorTube(f, a, b, eps) {
+  const nx = -fx_cached, ny = -fy_cached;   // defined after rebuild() computes them
+
+  // We build a scattered point cloud: for every grid point near the probe
+  // where |surface - plane| < eps, draw a thin vertical line segment between
+  // the plane and surface.
+  const EPOINTS = 40;
+  const halfW = 2.2;
+  const pts = [];
+  const fab = f(a, b);
+  const fx_ = partial(f, 'x', a, b);
+  const fy_ = partial(f, 'y', a, b);
+
+  for (let j = 0; j <= EPOINTS; j++) {
+    for (let i = 0; i <= EPOINTS; i++) {
+      const x = a - halfW + 2 * halfW * i / EPOINTS;
+      const y = b - halfW + 2 * halfW * j / EPOINTS;
+      if (Math.abs(x) > DOMAIN || Math.abs(y) > DOMAIN) continue;
+      const zSurface = f(x, y);
+      const zPlane   = fab + fx_ * (x - a) + fy_ * (y - b);
+      const err = Math.abs(zSurface - zPlane);
+      if (!isFinite(err)) continue;
+
+      if (err < eps) {
+        // alpha ramps to 0 as we approach the boundary
+        const alpha = 1 - err / Math.max(1e-9, eps);
+        pts.push({ x, y, zS: zSurface, zP: zPlane, alpha });
+      }
+    }
+  }
+
+  if (pts.length < 2) return new THREE.Group();
+
+  // Build a line-segment mesh — each point contributes a short vertical bar
+  const verts = [];
+  const colArr = [];
+  const goldCol = new THREE.Color(0xffd166);
+
+  for (const { x, y, zS, zP, alpha } of pts) {
+    const lo = Math.min(zS, zP);
+    const hi = Math.max(zS, zP);
+    const mid = (lo + hi) / 2;
+    // segment from surface to plane
+    verts.push(new THREE.Vector3(x, y, zS));
+    verts.push(new THREE.Vector3(x, y, zP));
+    const r = goldCol.r, g2 = goldCol.g, bl = goldCol.b;
+    colArr.push(r, g2, bl, r, g2, bl);
+  }
+
+  const tubeGeom = new THREE.BufferGeometry().setFromPoints(verts);
+  // Vertex colors for opacity is not trivial with LineSegments, use opacity
+  const tubeMat  = new THREE.LineBasicMaterial({
+    color: 0xffd166, transparent: true, opacity: Math.max(0.07, 0.35 * eps * 4),
+  });
+  const tubeLines = new THREE.LineSegments(tubeGeom, tubeMat);
+
+  // Also a thin filled region: small spheres at intersecting points
+  const grp = new THREE.Group();
+  grp.add(tubeLines);
+
+  // Dot cloud at the 'boundary' (points just within ε) to show the extent
+  const boundaryPts = pts.filter(p => Math.abs(p.zS - p.zP) > eps * 0.85);
+  if (boundaryPts.length > 0) {
+    const bGeom = new THREE.BufferGeometry();
+    const bVerts = new Float32Array(boundaryPts.length * 3);
+    boundaryPts.forEach(({ x, y, zS }, idx) => {
+      bVerts[idx * 3]     = x;
+      bVerts[idx * 3 + 1] = y;
+      bVerts[idx * 3 + 2] = zS;
+    });
+    bGeom.setAttribute('position', new THREE.BufferAttribute(bVerts, 3));
+    const bMat = new THREE.PointsMaterial({ color: 0xffd166, size: 0.04, transparent: true, opacity: 0.45 });
+    grp.add(new THREE.Points(bGeom, bMat));
+  }
+
+  return grp;
+}
+
+// Cached partials used by error tube
+let fx_cached = 0;
+let fy_cached = 0;
+
+// =============================================================================
+// GROUND GRID
+// =============================================================================
+function buildGroundGrid(zBottom) {
+  const size = DOMAIN + 0.5;
+  const step = 0.5;
+  const pts = [];
+  const mat = new THREE.LineBasicMaterial({ color: 0x1c2028, transparent: true, opacity: 0.55 });
+  for (let x = -size; x <= size + 1e-9; x += step) {
+    pts.push(new THREE.Vector3(x, -size, 0), new THREE.Vector3(x, size, 0));
+  }
+  for (let y = -size; y <= size + 1e-9; y += step) {
+    pts.push(new THREE.Vector3(-size, y, 0), new THREE.Vector3(size, y, 0));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  const grid = new THREE.LineSegments(geom, mat);
+  grid.position.z = zBottom - 0.01;
+  return grid;
+}
+
+// =============================================================================
+// PROBE SPHERE
+// =============================================================================
+function buildProbeSphere(a, b, fab) {
+  const sGeom = new THREE.SphereGeometry(0.055, 16, 16);
+  const sMat  = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+  const s = new THREE.Mesh(sGeom, sMat);
+  s.position.set(a, b, fab);
+  return s;
+}
+
+// =============================================================================
+// MAIN REBUILD
+// =============================================================================
+function rebuild() {
+  disposeGroup(stage);
+
+  const p = PRESETS[activeKey];
+  const f = p.f;
+
+  // Compute partials at probe
+  const fx = partial(f, 'x', probeA, probeB);
+  const fy = partial(f, 'y', probeA, probeB);
+  const fab = f(probeA, probeB);
+  fx_cached = fx;
+  fy_cached = fy;
+
+  // 1. Surface mesh
+  if (!hideSurface) {
+    const { geom, zMin, zMax } = buildSurfaceMesh(f);
+    const surfMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.65, metalness: 0.05,
+      side: THREE.DoubleSide, transparent: true, opacity: 0.72,
+    });
+    stage.add(new THREE.Mesh(geom, surfMat));
+
+    // Faint wireframe
+    const wfMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.14 });
+    stage.add(new THREE.LineSegments(new THREE.WireframeGeometry(geom), wfMat));
+
+    // Ground grid
+    stage.add(buildGroundGrid(zMin));
+  }
+
+  // 2. Tangent plane square
+  const tanPlane = buildTangentPlane(probeA, probeB, fab, fx, fy);
+  stage.add(tanPlane);
+
+  // 3. Slope rails
+  const rails = buildSlopeRails(probeA, probeB, fab, fx, fy);
+  stage.add(rails);
+  probeLabelPositions.fxTip = rails.userData.fxTip;
+  probeLabelPositions.fyTip = rails.userData.fyTip;
+
+  // 4. Probe sphere (gold, on surface)
+  stage.add(buildProbeSphere(probeA, probeB, fab));
+
+  // 5. Error tube
+  if (epsilonVal > 0.001) {
+    const tube = buildErrorTube(f, probeA, probeB, epsilonVal);
+    stage.add(tube);
+  }
+
+  // 6. Update overlay
+  updateOverlay(f, fx, fy, fab);
+}
+
+// =============================================================================
+// OVERLAY
+// =============================================================================
+function updateOverlay(f, fx, fy, fab) {
+  const p = PRESETS[activeKey];
+
+  // Main formula: z ≈ f(a,b) + fx(x-a) + fy(y-b)
+  renderMath(
+    document.getElementById('ovFormula'),
+    'z \\approx f(a,b) + f_x(a,b)(x-a) + f_y(a,b)(y-b)',
+    false
+  );
+
+  // Preset formula
+  renderMath(
+    document.getElementById('ovFFormula'),
+    p.latex,
+    false
+  );
+
+  document.getElementById('ovAB').textContent = `(${probeA.toFixed(2)}, ${probeB.toFixed(2)})`;
+  document.getElementById('ovFab').innerHTML  = prettyNumber(fab);
+  document.getElementById('ovFx').innerHTML   = prettyNumber(fx);
+  document.getElementById('ovFy').innerHTML   = prettyNumber(fy);
+
+  // Slope rail floating labels
+  const lblFx = document.getElementById('lblFx');
+  const lblFy = document.getElementById('lblFy');
+  lblFx.innerHTML = `f<sub>x</sub> = ${prettyNumber(fx)}`;
+  lblFy.innerHTML = `f<sub>y</sub> = ${prettyNumber(fy)}`;
+
+  // Example point: (a+0.3, b+0.3)
+  const ex  = probeA + 0.3,  ey = probeB + 0.3;
+  const trueVal  = f(ex, ey);
+  const predVal  = fab + fx * 0.3 + fy * 0.3;
+  const err      = trueVal - predVal;
+  const relPct   = Math.abs(trueVal) > 1e-9 ? Math.abs(err / trueVal) * 100 : null;
+
+  document.getElementById('ovExTrue').innerHTML = prettyNumber(trueVal);
+  document.getElementById('ovExPred').innerHTML = prettyNumber(predVal);
+  document.getElementById('ovExDiff').innerHTML = (err >= 0 ? '+' : '') + prettyNumber(err);
+  document.getElementById('ovExPct').textContent =
+    relPct !== null ? ` (${relPct.toFixed(1)}% off)` : '';
+
+  // Caption
+  document.getElementById('caption').textContent = p.caption;
+}
+
+// =============================================================================
+// CAMERA FRAMING
+// =============================================================================
+let initialCamera = false;
+
+function frameCamera(zMin, zMax) {
+  const cz = (zMin + zMax) / 2;
+  controls.target.set(probeA, probeB, cz);
+  if (!initialCamera) {
+    const reach = Math.max(2 * DOMAIN, zMax - zMin);
+    camera.position.set(
+      probeA + reach * 0.8,
+      probeB - reach * 1.0,
+      cz + reach * 0.9
+    );
+    initialCamera = true;
+  }
+  const range = Math.max(2 * DOMAIN, Math.abs(zMax - zMin));
+  camera.near = range * 0.004;
+  camera.far  = range * 30;
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+// =============================================================================
+// RESIZE / LOOP
+// =============================================================================
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  const w = Math.max(120, wrap.clientWidth);
+  const h = Math.max(120, wrap.clientHeight);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+// Project a world point to screen and position an absolutely-placed label
+function placeLabel(lbl, worldVec) {
+  if (!lbl || !worldVec) return;
+  const v = worldVec.clone().project(camera);
+  if (v.z < -1 || v.z > 1) { lbl.style.opacity = '0'; return; }
+  const rect = canvas.getBoundingClientRect();
+  const wrap = document.getElementById('scene-wrap').getBoundingClientRect();
+  const px = (v.x * 0.5 + 0.5) * rect.width  + (rect.left - wrap.left);
+  const py = (-v.y * 0.5 + 0.5) * rect.height + (rect.top  - wrap.top);
+  lbl.style.left = px + 'px';
+  lbl.style.top  = py + 'px';
+  lbl.style.opacity = '1';
+}
+
+function tick() {
+  controls.update();
+  renderer.render(scene, camera);
+  // Float labels
+  if (probeLabelPositions.fxTip) placeLabel(document.getElementById('lblFx'), probeLabelPositions.fxTip);
+  if (probeLabelPositions.fyTip) placeLabel(document.getElementById('lblFy'), probeLabelPositions.fyTip);
+  requestAnimationFrame(tick);
+}
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+// Sliders for a, b (in units of 0.001 → [-2.5, 2.5])
+document.getElementById('sliderA').addEventListener('input', e => {
+  probeA = +e.target.value / 1000;
+  document.getElementById('lblA').textContent = probeA.toFixed(2);
+  rebuild();
+});
+document.getElementById('sliderB').addEventListener('input', e => {
+  probeB = +e.target.value / 1000;
+  document.getElementById('lblB').textContent = probeB.toFixed(2);
+  rebuild();
+});
+document.getElementById('sliderEps').addEventListener('input', e => {
+  epsilonVal = +e.target.value / 1000;
+  document.getElementById('lblEps').textContent = epsilonVal.toFixed(3);
+  rebuild();
+});
+
+// Hide surface toggle
+const btnHideSurface = document.getElementById('btnHideSurface');
+btnHideSurface.addEventListener('click', () => {
+  hideSurface = !hideSurface;
+  btnHideSurface.textContent = hideSurface ? 'show surface' : 'hide surface';
+  btnHideSurface.classList.toggle('toggle-active', hideSurface);
+  rebuild();
+});
+
+// Reset view
+document.getElementById('btnReset').addEventListener('click', () => {
+  initialCamera = false;
+  rebuild();
+  const p = PRESETS[activeKey];
+  const f = p.f;
+  let zMin = Infinity, zMax = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      const x = -DOMAIN + 2 * DOMAIN * i / 7;
+      const y = -DOMAIN + 2 * DOMAIN * j / 7;
+      const z = f(x, y);
+      if (isFinite(z)) { zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); }
+    }
+  }
+  frameCamera(zMin, zMax);
+});
+
+// Click on canvas → raycast to surface, move probe
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  // Cast a ray and intersect with a virtual z=f(x,y) by approximate grid search
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera({ x: ndcX, y: ndcY }, camera);
+
+  // Sample the ray until it hits a z=0 plane roughly at the center to get x,y
+  // More robustly: find where the ray intersects z = fab plane at probe vicinity
+  // Simple approach: intersect with the horizontal plane z = f(probe)
+  const f = PRESETS[activeKey].f;
+  const probeZ = f(probeA, probeB);
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -probeZ);
+  const hit = new THREE.Vector3();
+  if (raycaster.ray.intersectPlane(plane, hit)) {
+    if (Math.abs(hit.x) <= DOMAIN && Math.abs(hit.y) <= DOMAIN) {
+      probeA = Math.max(-2.5, Math.min(2.5, hit.x));
+      probeB = Math.max(-2.5, Math.min(2.5, hit.y));
+      document.getElementById('sliderA').value = Math.round(probeA * 1000);
+      document.getElementById('sliderB').value = Math.round(probeB * 1000);
+      document.getElementById('lblA').textContent = probeA.toFixed(2);
+      document.getElementById('lblB').textContent = probeB.toFixed(2);
+      rebuild();
+    }
+  }
+});
+
+// Preset buttons
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b => b.classList.toggle('active', b === btn));
+    document.getElementById('customForm').classList.toggle('shown', activeKey === 'custom');
+    // Reset probe to a visually interesting position
+    if (activeKey === 'bowl')   { probeA =  1.0; probeB =  0.5; }
+    if (activeKey === 'sine')   { probeA =  0.8; probeB = -0.4; }
+    if (activeKey === 'saddle') { probeA =  0.0; probeB =  0.0; }
+    if (activeKey === 'cliff')  { probeA =  0.2; probeB =  0.5; }
+    if (activeKey === 'custom') { probeA =  0.5; probeB =  0.5; }
+    document.getElementById('sliderA').value = Math.round(probeA * 1000);
+    document.getElementById('sliderB').value = Math.round(probeB * 1000);
+    document.getElementById('lblA').textContent = probeA.toFixed(2);
+    document.getElementById('lblB').textContent = probeB.toFixed(2);
+    initialCamera = false;
+    rebuild();
+    const f = PRESETS[activeKey].f;
+    let zMin = Infinity, zMax = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        const x = -DOMAIN + 2 * DOMAIN * i / 7;
+        const y = -DOMAIN + 2 * DOMAIN * j / 7;
+        const z = f(x, y);
+        if (isFinite(z)) { zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); }
+      }
+    }
+    frameCamera(zMin, zMax);
+  });
+});
+
+// Custom form
+document.getElementById('customApply').addEventListener('click', applyCustom);
+document.getElementById('customExpr').addEventListener('keydown', e => {
+  if (e.key === 'Enter') applyCustom();
+});
+
+function applyCustom() {
+  const errEl = document.getElementById('customError');
+  errEl.textContent = '';
+  let fn;
+  try {
+    fn = compileF(document.getElementById('customExpr').value);
+  } catch (e) {
+    errEl.textContent = e.message;
+    return;
+  }
+  const raw = document.getElementById('customExpr').value.trim();
+  PRESETS.custom = {
+    label: 'custom',
+    latex: `f(x, y) = ${raw}`,
+    f: fn,
+    caption: 'Your custom function. Drag the probe to explore.',
+  };
+  if (activeKey !== 'custom') {
+    document.querySelectorAll('.presets button').forEach(b => b.classList.toggle('active', b.dataset.preset === 'custom'));
+    activeKey = 'custom';
+    document.getElementById('customForm').classList.add('shown');
+  }
+  initialCamera = false;
+  rebuild();
+  let zMin = Infinity, zMax = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      const x = -DOMAIN + 2 * DOMAIN * i / 7;
+      const y = -DOMAIN + 2 * DOMAIN * j / 7;
+      const z = fn(x, y);
+      if (isFinite(z)) { zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); }
+    }
+  }
+  frameCamera(zMin, zMax);
+}
+
+// =============================================================================
+// INLINE SELF-TESTS
+// =============================================================================
+(() => {
+  let pass = 0, fail = 0;
+  function assert(cond, msg) {
+    if (cond) { pass++; }
+    else { fail++; console.error('[tangent-plane] FAIL:', msg); }
+  }
+
+  const f = (x, y) => x * x + 2 * y * y + x * y;
+  // ∂/∂x (x²+2y²+xy) at (1,1) = 2x + y = 3
+  const fx = partial(f, 'x', 1, 1);
+  assert(Math.abs(fx - 3) < 1e-3, `fx at (1,1): got ${fx}, want 3`);
+  // ∂/∂y at (1,1) = 4y + x = 5
+  const fy_ = partial(f, 'y', 1, 1);
+  assert(Math.abs(fy_ - 5) < 1e-3, `fy at (1,1): got ${fy_}, want 5`);
+  // Linear approx at the probe should exactly equal f(a,b)
+  const a = 0.5, b = 0.5;
+  assert(Math.abs(linearApprox(f, a, b, a, b) - f(a, b)) < 1e-9, 'linApprox at probe == f(a,b)');
+  // Linear approx is exact for linear functions
+  const fLin = (x, y) => 3 * x - 2 * y + 1;
+  const approxLin = linearApprox(fLin, 0, 0, 1.5, -0.7);
+  assert(Math.abs(approxLin - fLin(1.5, -0.7)) < 1e-7, 'linear function: approx == exact');
+  // Partial of x^2 at (2, 0) = 4
+  const f2 = (x, y) => x * x;
+  assert(Math.abs(partial(f2, 'x', 2, 0) - 4) < 1e-3, 'partial x^2 at x=2');
+  // Partial of sin(y) w.r.t. y at (0, pi/2) = 0
+  const f3 = (x, y) => Math.sin(y);
+  assert(Math.abs(partial(f3, 'y', 0, Math.PI / 2)) < 1e-3, 'partial sin(y) at pi/2');
+
+  if (fail === 0) {
+    console.log(`[tangent-plane] all ${pass} tests passed`);
+  } else {
+    console.warn(`[tangent-plane] ${fail} test(s) FAILED (${pass} passed)`);
+  }
+})();
+
+// =============================================================================
+// BOOT
+// =============================================================================
+// Set initial interesting probe position for the bowl preset
+probeA = 1.0;
+probeB = 0.5;
+document.getElementById('sliderA').value = Math.round(probeA * 1000);
+document.getElementById('sliderB').value = Math.round(probeB * 1000);
+document.getElementById('lblA').textContent = probeA.toFixed(2);
+document.getElementById('lblB').textContent = probeB.toFixed(2);
+document.getElementById('lblEps').textContent = epsilonVal.toFixed(3);
+
+rebuild();
+
+// Initial camera framing
+const bootF = PRESETS[activeKey].f;
+let bootZMin = Infinity, bootZMax = -Infinity;
+for (let i = 0; i < 8; i++) {
+  for (let j = 0; j < 8; j++) {
+    const x = -DOMAIN + 2 * DOMAIN * i / 7;
+    const y = -DOMAIN + 2 * DOMAIN * j / 7;
+    const z = bootF(x, y);
+    if (isFinite(z)) { bootZMin = Math.min(bootZMin, z); bootZMax = Math.max(bootZMax, z); }
+  }
+}
+frameCamera(bootZMin, bootZMax);
+resize();
+tick();
+
+// Debugging hooks
+window.__stage   = stage;
+window.__camera  = camera;
+window.__rebuild = rebuild;
+window.__state   = () => ({ activeKey, probeA, probeB, epsilonVal, hideSurface });
+</script>
+</body>
+</html>

@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lagrange Multipliers · Constrained Optimization Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  /* 4 rows, pinned explicitly so #customForm display:none doesn't collapse scene */
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255,209,102,0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 180px;
+  }
+  #customForm input[type=text].sm { width: 80px; }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+
+  #scene-wrap { position: relative; overflow: hidden; }
+  #lagCanvas {
+    display: block; width: 100%; height: 100%;
+    cursor: crosshair;
+  }
+
+  /* ---- Overlay top-right ---- */
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14,17,22,0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px; padding: 14px 16px;
+    pointer-events: none; backdrop-filter: blur(6px);
+    max-width: 320px; min-width: 240px;
+    font-size: 12.5px; line-height: 1.55;
+  }
+  .overlay h2 { margin: 0 0 2px; font-size: 17px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .eq-main { margin: 4px 0 6px; }
+  .overlay .eq-main .katex { font-size: 1.0em; }
+  .overlay .preset-caption {
+    color: var(--soft); font-size: 11.5px; font-style: italic; margin-bottom: 6px;
+  }
+  .overlay hr { border: none; border-top: 1px solid var(--pill-border); margin: 6px 0; }
+  .overlay .row {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-family: "Courier New", monospace; font-size: 11.5px; color: var(--ink);
+  }
+  .overlay .row .val { color: var(--gold); }
+  .overlay .row .val.blue { color: var(--blue); }
+  .overlay .lbl-soft { color: var(--soft); font-size: 10.5px; font-style: italic; margin-bottom: 2px; }
+  .overlay .status-msg {
+    margin-top: 7px; padding: 5px 9px; border-radius: 6px;
+    font-size: 12px; font-weight: bold; text-align: center;
+    background: rgba(255,209,102,0.12); color: var(--gold);
+    border: 1px solid rgba(255,209,102,0.3);
+    transition: all 0.25s;
+  }
+  .overlay .status-msg.not-yet {
+    background: rgba(106,169,255,0.08); color: var(--soft);
+    border-color: rgba(106,169,255,0.2);
+  }
+  .overlay .lambda-row {
+    margin-top: 4px;
+    font-family: "Courier New", monospace; font-size: 11.5px;
+    color: var(--rose);
+    min-height: 16px;
+  }
+  .overlay .legend {
+    margin-top: 8px; font-size: 11px; color: var(--soft); line-height: 1.6;
+  }
+  .overlay .legend .sw {
+    display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; vertical-align: middle; margin-right: 5px;
+  }
+
+  /* Caption bar above canvas */
+  #caption {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(14,17,22,0.72); border-top: 1px solid var(--pill-border);
+    padding: 6px 20px; font-size: 12px; color: var(--soft);
+    pointer-events: none; text-align: center;
+  }
+
+  footer {
+    padding: 10px 24px; display: grid;
+    grid-template-columns: auto 1fr auto 1fr auto auto;
+    gap: 10px; align-items: center;
+    border-top: 1px solid var(--pill-border);
+  }
+  footer .lbl { color: var(--soft); font-size: 13px; white-space: nowrap; }
+  footer .lbl b { color: var(--ink); font-family: "Courier New", monospace; font-weight: normal; }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #23272d;
+    border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold); cursor: pointer; border: 2px solid var(--bg);
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 16px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; white-space: nowrap;
+    transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Lagrange Multipliers</b> · constrained optimization</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="circle_linear" class="active">circle · f = x+y</button>
+      <button data-preset="line_dist">closest point · line</button>
+      <button data-preset="ellipse_product">ellipse · f = xy</button>
+      <button data-preset="circle_saddle">circle · saddle f</button>
+    </div>
+  </header>
+
+  <!-- customForm: hidden by default, shown when needed -->
+  <div id="customForm">
+    <label>f(x, y) =</label>
+    <input id="cfF" type="text" value="x + y" placeholder="e.g. x*y">
+    <label>g(x, y) =</label>
+    <input id="cfG" type="text" value="x^2 + y^2" placeholder="e.g. x^2+y^2">
+    <label>c =</label>
+    <input id="cfC" type="text" class="sm" value="1">
+    <button id="cfApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">functions: sin, cos, sqrt, abs, log, exp · power: ^ · constants: pi, e</span>
+  </div>
+
+  <div id="scene-wrap">
+    <canvas id="lagCanvas"></canvas>
+    <div class="overlay" id="overlay">
+      <h2><b>Lagrange Multipliers</b></h2>
+      <div class="eq-main" id="ovEq"></div>
+      <div class="preset-caption" id="ovCaption"></div>
+      <hr>
+      <div class="lbl-soft">probe position</div>
+      <div class="row"><span>(x, y)</span><span class="val" id="ovXY">—</span></div>
+      <div class="row"><span>f(x, y)</span><span class="val" id="ovF">—</span></div>
+      <div class="row"><span>g(x, y)</span><span class="val" id="ovG">—</span></div>
+      <hr>
+      <div class="row"><span>∇f</span><span class="val blue" id="ovGF">—</span></div>
+      <div class="row"><span>∇g</span><span class="val" id="ovGG">—</span></div>
+      <div class="row"><span>cos(angle)</span><span class="val" id="ovCos">—</span></div>
+      <div class="lambda-row" id="ovLambda"></div>
+      <div class="status-msg not-yet" id="ovStatus">Not yet — move the probe along the curve</div>
+      <hr>
+      <div class="legend">
+        <div><span class="sw" style="background:rgba(106,169,255,0.55)"></span>level curves of f (soft blue)</div>
+        <div><span class="sw" style="background:var(--gold)"></span>constraint g = c (gold)</div>
+        <div><span class="sw" style="background:var(--blue)"></span>∇f at probe (blue arrow)</div>
+        <div><span class="sw" style="background:var(--gold)"></span>∇g at probe (gold arrow)</div>
+        <div><span class="sw" style="background:#ff8a3d; border-radius:50%"></span>probe · drag me along the curve</div>
+      </div>
+    </div>
+    <div id="caption">Drag the probe along the gold constraint curve. Watch for the moment the two arrows align — that's the optimum.</div>
+  </div>
+
+  <footer>
+    <span class="lbl">c = <b id="lblC">1.00</b></span>
+    <input type="range" id="sliderC" min="0" max="1000" value="333" style="min-width:80px">
+    <span class="lbl">probe</span>
+    <input type="range" id="sliderProbe" min="0" max="1000" value="0">
+    <button class="action ghost" id="btnSnap">⚡ snap to optimum</button>
+    <button class="action ghost" id="btnToggleContours">hide contours</button>
+  </footer>
+</div>
+
+<script>
+// =============================================================================
+// UTILITY
+// =============================================================================
+function prettyNumber(v) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 0.001 && a < 10000) return v.toFixed(3);
+  const exp = Math.floor(Math.log10(a));
+  const mant = v / Math.pow(10, exp);
+  const sign = exp < 0 ? '−' : '';
+  const absExp = Math.abs(exp);
+  return `${mant.toFixed(2)} × 10<sup>${sign}${absExp}</sup>`;
+}
+function fmt(v) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0.000';
+  if (a >= 0.001 && a < 10000) return v.toFixed(3);
+  const exp = Math.floor(Math.log10(a));
+  const mant = v / Math.pow(10, exp);
+  const sign = exp < 0 ? '−' : '';
+  const absExp = Math.abs(exp);
+  return `${mant.toFixed(2)} × 10<sup>${sign}${absExp}</sup>`;
+}
+function renderMath(el, latex, display) {
+  if (window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: !!display }); return; }
+    catch (e) { /* fall through */ }
+  }
+  el.textContent = latex;
+}
+
+// =============================================================================
+// EXPRESSION COMPILER — new Function + with(Math), same pattern as shell.html
+// =============================================================================
+function compileExpr(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('empty expression');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b(?![xp])/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error'); }
+  for (const [tx, ty] of [[0.3, 0.7], [-0.5, 1], [1, -0.5]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives non-number at (${tx}, ${ty})`);
+  }
+  return fn;
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PRESETS = {
+  circle_linear: {
+    label: 'Maximize f = x+y on the unit circle',
+    fLatex: 'f(x,y) = x + y',
+    gLatex: 'g(x,y) = x^2 + y^2',
+    caption: 'Find the largest x+y value on the unit circle. Optima at (√2/2, √2/2) and (−√2/2, −√2/2).',
+    f: (x, y) => x + y,
+    g: (x, y) => x * x + y * y,
+    cMin: 0.3, cMax: 3.0, cDefault: 1.0,
+    fContourMin: -2.5, fContourMax: 2.5,
+  },
+  line_dist: {
+    label: 'Closest point on x+y=2 to the origin',
+    fLatex: 'f(x,y) = x^2 + y^2',
+    gLatex: 'g(x,y) = x + y',
+    caption: 'Minimize the squared distance to the origin subject to staying on the line x+y=2. Optimum at (1, 1).',
+    f: (x, y) => x * x + y * y,
+    g: (x, y) => x + y,
+    cMin: -2.5, cMax: 2.5, cDefault: 2.0,
+    fContourMin: 0, fContourMax: 12,
+  },
+  ellipse_product: {
+    label: 'Maximize f = xy on ellipse x²/4 + y² = 1',
+    fLatex: 'f(x,y) = x y',
+    gLatex: 'g(x,y) = \\tfrac{x^2}{4} + y^2',
+    caption: 'Maximize the product xy constrained to an ellipse. Optima at (√2, 1/√2) and (−√2, −1/√2).',
+    f: (x, y) => x * y,
+    g: (x, y) => x * x / 4 + y * y,
+    cMin: 0.2, cMax: 1.8, cDefault: 1.0,
+    fContourMin: -2.5, fContourMax: 2.5,
+  },
+  circle_saddle: {
+    label: 'f = x²−y² (saddle) on unit circle',
+    fLatex: 'f(x,y) = x^2 - y^2',
+    gLatex: 'g(x,y) = x^2 + y^2',
+    caption: 'f has a saddle at the origin, but constrained to the circle it has 4 critical points at (±1, 0) and (0, ±1).',
+    f: (x, y) => x * x - y * y,
+    g: (x, y) => x * x + y * y,
+    cMin: 0.3, cMax: 3.0, cDefault: 1.0,
+    fContourMin: -2.5, fContourMax: 2.5,
+  },
+};
+
+let activeKey = 'circle_linear';
+let showContours = true;
+// c value (constraint level)
+let cValue = 1.0;
+// probe parameter t ∈ [0, 1) around constraint curve
+let probeT = 0.0;
+// constraint curve: array of {x, y} points (closed polygon from marching squares, stitched)
+let constraintPts = [];
+// domain
+const XMIN = -2.5, XMAX = 2.5, YMIN = -2.5, YMAX = 2.5;
+const GRID_N = 200;  // marching squares grid resolution
+
+// =============================================================================
+// GRADIENT (central differences, h = 1e-4)
+// =============================================================================
+const H = 1e-4;
+function grad(fn, x, y) {
+  return {
+    dx: (fn(x + H, y) - fn(x - H, y)) / (2 * H),
+    dy: (fn(x, y + H) - fn(x, y - H)) / (2 * H),
+  };
+}
+
+// =============================================================================
+// MARCHING SQUARES — returns array of {x0,y0,x1,y1} segments for f(x,y)=c
+// =============================================================================
+function marchSquares(fn, c, xmin, xmax, ymin, ymax, n) {
+  const segs = [];
+  const dx = (xmax - xmin) / n, dy = (ymax - ymin) / n;
+  // sample grid
+  const grid = [];
+  for (let j = 0; j <= n; j++) {
+    const row = [];
+    const y = ymin + j * dy;
+    for (let i = 0; i <= n; i++) {
+      const x = xmin + i * dx;
+      const v = fn(x, y);
+      row.push(isFinite(v) ? v : c - 1e10);
+    }
+    grid.push(row);
+  }
+  const interp = (va, vb, pa, pb) => pa + (c - va) * (pb - pa) / (vb - va);
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x0 = xmin + i * dx, x1 = x0 + dx;
+      const y0 = ymin + j * dy, y1 = y0 + dy;
+      const v00 = grid[j][i], v10 = grid[j][i+1], v01 = grid[j+1][i], v11 = grid[j+1][i+1];
+      let code = 0;
+      if (v00 > c) code |= 1;
+      if (v10 > c) code |= 2;
+      if (v11 > c) code |= 4;
+      if (v01 > c) code |= 8;
+      if (code === 0 || code === 15) continue;
+      let b, r, t, l;
+      if ((code & 1) !== ((code >> 1) & 1)) b = [interp(v00, v10, x0, x1), y0];
+      if ((code & 2) !== ((code >> 1) & 2)) r = [x1, interp(v10, v11, y0, y1)];
+      if ((code & 8) !== ((code >> 1) & 4)) t = [interp(v01, v11, x0, x1), y1];
+      if ((code & 1) !== ((code >> 3) & 1)) l = [x0, interp(v00, v01, y0, y1)];
+      const push = (p, q) => { if (p && q) segs.push({x0:p[0],y0:p[1],x1:q[0],y1:q[1]}); };
+      switch (code) {
+        case 1: case 14: push(l, b); break;
+        case 2: case 13: push(b, r); break;
+        case 3: case 12: push(l, r); break;
+        case 4: case 11: push(t, r); break;  // fixed: was case 4/11
+        case 6: case 9:  push(b, t); break;
+        case 7: case 8:  push(l, t); break;
+        case 5: {
+          const vc = (v00+v10+v01+v11)/4;
+          if (vc > c) { push(l, t); push(b, r); } else { push(l, b); push(t, r); }
+          break;
+        }
+        case 10: {
+          const vc = (v00+v10+v01+v11)/4;
+          if (vc > c) { push(l, b); push(t, r); } else { push(l, t); push(b, r); }
+          break;
+        }
+      }
+    }
+  }
+  return segs;
+}
+
+// =============================================================================
+// STITCH SEGMENTS into a polyline (greedy nearest-neighbor)
+// =============================================================================
+function stitchSegments(segs) {
+  if (segs.length === 0) return [];
+  // Build adjacency: for each seg, try to connect end to start of another
+  const used = new Uint8Array(segs.length);
+  const EPS = 1e-6;
+  const chains = [];
+  for (let start = 0; start < segs.length; start++) {
+    if (used[start]) continue;
+    const chain = [{x: segs[start].x0, y: segs[start].y0}, {x: segs[start].x1, y: segs[start].y1}];
+    used[start] = 1;
+    // extend forward
+    let extended = true;
+    while (extended) {
+      extended = false;
+      const tail = chain[chain.length - 1];
+      for (let k = 0; k < segs.length; k++) {
+        if (used[k]) continue;
+        const d0 = Math.hypot(segs[k].x0 - tail.x, segs[k].y0 - tail.y);
+        const d1 = Math.hypot(segs[k].x1 - tail.x, segs[k].y1 - tail.y);
+        if (d0 < EPS) { chain.push({x: segs[k].x1, y: segs[k].y1}); used[k] = 1; extended = true; break; }
+        if (d1 < EPS) { chain.push({x: segs[k].x0, y: segs[k].y0}); used[k] = 1; extended = true; break; }
+      }
+    }
+    // extend backward
+    extended = true;
+    while (extended) {
+      extended = false;
+      const head = chain[0];
+      for (let k = 0; k < segs.length; k++) {
+        if (used[k]) continue;
+        const d0 = Math.hypot(segs[k].x0 - head.x, segs[k].y0 - head.y);
+        const d1 = Math.hypot(segs[k].x1 - head.x, segs[k].y1 - head.y);
+        if (d0 < EPS) { chain.unshift({x: segs[k].x1, y: segs[k].y1}); used[k] = 1; extended = true; break; }
+        if (d1 < EPS) { chain.unshift({x: segs[k].x0, y: segs[k].y0}); used[k] = 1; extended = true; break; }
+      }
+    }
+    if (chain.length >= 2) chains.push(chain);
+  }
+  // Return longest chain
+  chains.sort((a, b) => b.length - a.length);
+  return chains[0] || [];
+}
+
+// Parameterize a polyline by arc-length, return cumulative lengths
+function arcLengths(pts) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    cum.push(cum[i-1] + Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y));
+  }
+  return cum;
+}
+
+// Evaluate position on chain at normalized parameter t ∈ [0,1]
+function evalChain(pts, cum, t) {
+  const L = cum[cum.length - 1];
+  if (L < 1e-10) return pts[0];
+  let s = ((t % 1) + 1) % 1 * L;  // wrap
+  let lo = 0, hi = cum.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid] <= s) lo = mid; else hi = mid;
+  }
+  const u = (s - cum[lo]) / Math.max(1e-12, cum[hi] - cum[lo]);
+  return {
+    x: pts[lo].x + u * (pts[hi].x - pts[lo].x),
+    y: pts[lo].y + u * (pts[hi].y - pts[lo].y),
+  };
+}
+
+// =============================================================================
+// CANVAS 2D RENDERER
+// =============================================================================
+const canvas = document.getElementById('lagCanvas');
+const ctx = canvas.getContext('2d');
+
+let W = 1, H_px = 1;
+let arcCum = [];       // cumulative arc lengths for constraintPts
+let criticalTs = [];   // t values where |cos| is near 1
+
+// World → canvas pixel
+function wx(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
+function wy(y) { return (1 - (y - YMIN) / (YMAX - YMIN)) * H_px; }
+function cw2w(px) { return XMIN + px / W * (XMAX - XMIN); }
+function ch2w(py) { return YMAX - py / H_px * (YMAX - YMIN); }
+
+// Scale a domain-unit length to pixels
+function scaleLen(d) { return d / (XMAX - XMIN) * W; }
+
+function drawArrow(cx, cy, vx, vy, color, width) {
+  const px0 = wx(cx), py0 = wy(cy);
+  const px1 = wx(cx + vx), py1 = wy(cy + vy);
+  const dx = px1 - px0, dy = py1 - py0;
+  const L = Math.hypot(dx, dy);
+  if (L < 1) return;
+  const headLen = Math.max(8, L * 0.22);
+  const angle = Math.atan2(dy, dx);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width || 2;
+  ctx.lineCap = 'round';
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(px0, py0);
+  ctx.lineTo(px1, py1);
+  ctx.stroke();
+  // arrowhead
+  ctx.beginPath();
+  ctx.moveTo(px1, py1);
+  ctx.lineTo(px1 - headLen * Math.cos(angle - 0.45), py1 - headLen * Math.sin(angle - 0.45));
+  ctx.moveTo(px1, py1);
+  ctx.lineTo(px1 - headLen * Math.cos(angle + 0.45), py1 - headLen * Math.sin(angle + 0.45));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render() {
+  const p = PRESETS[activeKey];
+  W = canvas.width; H_px = canvas.height;
+  ctx.clearRect(0, 0, W, H_px);
+
+  // Background
+  ctx.fillStyle = '#0e1116';
+  ctx.fillRect(0, 0, W, H_px);
+
+  // Faint grid
+  ctx.strokeStyle = '#1a1d22';
+  ctx.lineWidth = 1;
+  for (let x = Math.ceil(XMIN); x <= XMAX; x++) {
+    ctx.beginPath(); ctx.moveTo(wx(x), 0); ctx.lineTo(wx(x), H_px); ctx.stroke();
+  }
+  for (let y = Math.ceil(YMIN); y <= YMAX; y++) {
+    ctx.beginPath(); ctx.moveTo(0, wy(y)); ctx.lineTo(W, wy(y)); ctx.stroke();
+  }
+
+  // Axes
+  ctx.strokeStyle = '#3a414a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, wy(0)); ctx.lineTo(W, wy(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(wx(0), 0); ctx.lineTo(wx(0), H_px); ctx.stroke();
+
+  // ── Contour map of f (soft blue, ~12 levels)
+  if (showContours) {
+    const { fContourMin, fContourMax } = p;
+    const NLEV = 13;
+    for (let k = 0; k < NLEV; k++) {
+      const fLevel = fContourMin + (fContourMax - fContourMin) * k / (NLEV - 1);
+      const segs = marchSquares(p.f, fLevel, XMIN, XMAX, YMIN, YMAX, 150);
+      ctx.strokeStyle = 'rgba(106, 169, 255, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const s of segs) {
+        ctx.moveTo(wx(s.x0), wy(s.y0));
+        ctx.lineTo(wx(s.x1), wy(s.y1));
+      }
+      ctx.stroke();
+    }
+  }
+
+  // ── Highlighted level curve of f through probe (brighter)
+  if (constraintPts.length > 0 && arcCum.length > 0) {
+    const probe = evalChain(constraintPts, arcCum, probeT);
+    const fAtProbe = p.f(probe.x, probe.y);
+    const hSegs = marchSquares(p.f, fAtProbe, XMIN, XMAX, YMIN, YMAX, 150);
+    ctx.strokeStyle = 'rgba(106, 169, 255, 0.80)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const s of hSegs) {
+      ctx.moveTo(wx(s.x0), wy(s.y0));
+      ctx.lineTo(wx(s.x1), wy(s.y1));
+    }
+    ctx.stroke();
+  }
+
+  // ── Constraint curve g = c (gold, prominent)
+  if (constraintPts.length >= 2) {
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = 'rgba(255, 209, 102, 0.35)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(wx(constraintPts[0].x), wy(constraintPts[0].y));
+    for (let i = 1; i < constraintPts.length; i++) {
+      ctx.lineTo(wx(constraintPts[i].x), wy(constraintPts[i].y));
+    }
+    // close if it's a closed curve
+    const first = constraintPts[0], last = constraintPts[constraintPts.length - 1];
+    if (Math.hypot(first.x - last.x, first.y - last.y) < 0.15) {
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // ── Probe dot + gradient arrows
+  if (constraintPts.length > 0 && arcCum.length > 0) {
+    const probe = evalChain(constraintPts, arcCum, probeT);
+    const gf = grad(p.f, probe.x, probe.y);
+    const gg = grad(p.g, probe.x, probe.y);
+    const magGF = Math.hypot(gf.dx, gf.dy);
+    const magGG = Math.hypot(gg.dx, gg.dy);
+
+    // Normalize to ~0.5 domain units for visibility
+    const TARGET_LEN = 0.5;
+    const scaleF = magGF > 1e-8 ? TARGET_LEN / magGF : 0;
+    const scaleG = magGG > 1e-8 ? TARGET_LEN / magGG : 0;
+    const vfx = gf.dx * scaleF, vfy = gf.dy * scaleF;
+    const vgx = gg.dx * scaleG, vgy = gg.dy * scaleG;
+
+    // cos(angle) between ∇f and ∇g
+    const dot = gf.dx * gg.dx + gf.dy * gg.dy;
+    const cosAngle = (magGF > 1e-8 && magGG > 1e-8) ? dot / (magGF * magGG) : 0;
+    const isParallel = Math.abs(cosAngle) > 0.95;
+
+    // Glow effect when parallel
+    if (isParallel) {
+      ctx.shadowColor = 'rgba(255, 209, 102, 0.7)';
+      ctx.shadowBlur = 18;
+    }
+
+    // ∇g arrow (gold, drawn first so ∇f is on top)
+    drawArrow(probe.x, probe.y, vgx, vgy, '#ffd166', isParallel ? 3.5 : 2);
+    // ∇f arrow (blue)
+    drawArrow(probe.x, probe.y, vfx, vfy, '#6aa9ff', isParallel ? 3.5 : 2);
+
+    ctx.shadowBlur = 0;
+
+    // Probe dot
+    const px = wx(probe.x), py = wy(probe.y);
+    const dotR = isParallel ? 9 : 7;
+    if (isParallel) {
+      ctx.shadowColor = 'rgba(255, 209, 102, 0.9)';
+      ctx.shadowBlur = 22;
+    }
+    ctx.fillStyle = '#ff8a3d';
+    ctx.beginPath();
+    ctx.arc(px, py, dotR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Thin ring around probe when parallel
+    if (isParallel) {
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, dotR + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Update overlay
+    const fVal = p.f(probe.x, probe.y);
+    const gVal = p.g(probe.x, probe.y);
+    document.getElementById('ovXY').textContent = `(${fmt(probe.x)}, ${fmt(probe.y)})`;
+    document.getElementById('ovF').innerHTML = prettyNumber(fVal);
+    document.getElementById('ovG').innerHTML = prettyNumber(gVal);
+    document.getElementById('ovGF').textContent = `⟨${fmt(gf.dx)}, ${fmt(gf.dy)}⟩`;
+    document.getElementById('ovGG').textContent = `⟨${fmt(gg.dx)}, ${fmt(gg.dy)}⟩`;
+    document.getElementById('ovCos').innerHTML = prettyNumber(cosAngle);
+
+    const statusEl = document.getElementById('ovStatus');
+    const lambdaEl = document.getElementById('ovLambda');
+    if (isParallel) {
+      const lambda = (magGG > 1e-8) ? (magGF / magGG) * Math.sign(cosAngle) : 0;
+      lambdaEl.innerHTML = `λ ≈ ${fmt(lambda)} &nbsp;(∇f = λ·∇g)`;
+      statusEl.textContent = '✓ Optimum found! ∇f and ∇g are parallel here.';
+      statusEl.classList.remove('not-yet');
+    } else {
+      lambdaEl.textContent = '';
+      statusEl.textContent = 'Not yet — gradients still crossing. Keep sliding.';
+      statusEl.classList.add('not-yet');
+    }
+  }
+}
+
+// =============================================================================
+// REBUILD — recompute constraint curve for current preset + c value
+// =============================================================================
+function rebuild() {
+  const p = PRESETS[activeKey];
+  const segs = marchSquares(p.g, cValue, XMIN, XMAX, YMIN, YMAX, GRID_N);
+  const chain = stitchSegments(segs);
+  constraintPts = chain;
+  arcCum = arcLengths(chain);
+
+  // Render overlay math
+  renderMath(document.getElementById('ovEq'),
+    '\\nabla f = \\lambda\\, \\nabla g \\quad \\text{subject to} \\quad g(x,y)=c', false);
+
+  document.getElementById('ovCaption').textContent = p.caption;
+
+  render();
+}
+
+// =============================================================================
+// FIND CRITICAL POINTS — sample probe parameter, find |cos| maxima
+// =============================================================================
+function findCriticalTs() {
+  if (constraintPts.length < 2 || arcCum.length < 2) return [];
+  const p = PRESETS[activeKey];
+  const SAMPLES = 500;
+  let best = [];
+  // sample cosAngle over the curve
+  const vals = [];
+  for (let i = 0; i < SAMPLES; i++) {
+    const t = i / SAMPLES;
+    const pt = evalChain(constraintPts, arcCum, t);
+    const gf = grad(p.f, pt.x, pt.y);
+    const gg = grad(p.g, pt.x, pt.y);
+    const mf = Math.hypot(gf.dx, gf.dy);
+    const mg = Math.hypot(gg.dx, gg.dy);
+    const cos = (mf > 1e-8 && mg > 1e-8) ? (gf.dx * gg.dx + gf.dy * gg.dy) / (mf * mg) : 0;
+    vals.push({ t, cos: Math.abs(cos) });
+  }
+  // Find local maxima with |cos| > 0.8
+  for (let i = 0; i < SAMPLES; i++) {
+    const prev = vals[(i - 1 + SAMPLES) % SAMPLES];
+    const cur = vals[i];
+    const next = vals[(i + 1) % SAMPLES];
+    if (cur.cos > 0.8 && cur.cos >= prev.cos && cur.cos >= next.cos) {
+      best.push({ t: cur.t, cos: cur.cos });
+    }
+  }
+  // Sort by |cos| descending
+  best.sort((a, b) => b.cos - a.cos);
+  return best.map(b => b.t);
+}
+
+// =============================================================================
+// RESIZE
+// =============================================================================
+function resize() {
+  const wrap = document.getElementById('scene-wrap');
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = wrap.clientWidth, cssH = wrap.clientHeight;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  ctx.scale(dpr, dpr);
+  W = cssW; H_px = cssH;
+  render();
+}
+window.addEventListener('resize', () => { ctx.setTransform(1, 0, 0, 1, 0, 0); resize(); });
+
+// =============================================================================
+// DRAG PROBE along constraint curve — clamp to nearest curve point
+// =============================================================================
+let isDragging = false;
+
+function nearestTOnCurve(wx_, wy_) {
+  if (constraintPts.length < 2) return probeT;
+  const L = arcCum[arcCum.length - 1];
+  if (L < 1e-10) return 0;
+  let best = 0, bestDist = Infinity;
+  for (let i = 0; i < constraintPts.length; i++) {
+    const d = Math.hypot(constraintPts[i].x - wx_, constraintPts[i].y - wy_);
+    if (d < bestDist) { bestDist = d; best = arcCum[i] / L; }
+  }
+  return best;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  isDragging = true;
+  canvas.setPointerCapture(e.pointerId);
+  const rect = canvas.getBoundingClientRect();
+  const mx = cw2w((e.clientX - rect.left) * (canvas.width / rect.width) / (window.devicePixelRatio || 1));
+  const my = ch2w((e.clientY - rect.top)  * (canvas.height / rect.height) / (window.devicePixelRatio || 1));
+  probeT = nearestTOnCurve(mx, my);
+  document.getElementById('sliderProbe').value = Math.round(probeT * 1000);
+  render();
+});
+canvas.addEventListener('pointermove', e => {
+  if (!isDragging) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = cw2w((e.clientX - rect.left) * (canvas.width / rect.width) / (window.devicePixelRatio || 1));
+  const my = ch2w((e.clientY - rect.top)  * (canvas.height / rect.height) / (window.devicePixelRatio || 1));
+  probeT = nearestTOnCurve(mx, my);
+  document.getElementById('sliderProbe').value = Math.round(probeT * 1000);
+  render();
+});
+canvas.addEventListener('pointerup', e => {
+  isDragging = false;
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+});
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+
+// Preset pills
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b => b.classList.toggle('active', b === btn));
+    const p = PRESETS[activeKey];
+    // Set c slider range
+    const slC = document.getElementById('sliderC');
+    const cRange = p.cMax - p.cMin;
+    cValue = p.cDefault;
+    slC.value = Math.round((cValue - p.cMin) / cRange * 1000);
+    document.getElementById('lblC').textContent = cValue.toFixed(2);
+    probeT = 0;
+    document.getElementById('sliderProbe').value = 0;
+    rebuild();
+  });
+});
+
+// c slider
+document.getElementById('sliderC').addEventListener('input', e => {
+  const p = PRESETS[activeKey];
+  cValue = p.cMin + (+e.target.value / 1000) * (p.cMax - p.cMin);
+  document.getElementById('lblC').textContent = cValue.toFixed(2);
+  rebuild();
+});
+
+// probe slider
+document.getElementById('sliderProbe').addEventListener('input', e => {
+  probeT = +e.target.value / 1000;
+  render();
+});
+
+// snap to nearest critical point
+document.getElementById('btnSnap').addEventListener('click', () => {
+  const ts = findCriticalTs();
+  if (ts.length > 0) {
+    // pick the critical point nearest to current probeT
+    let best = ts[0];
+    let bestD = Math.abs(ts[0] - probeT);
+    for (const t of ts) {
+      const d = Math.min(Math.abs(t - probeT), 1 - Math.abs(t - probeT));
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    probeT = best;
+    document.getElementById('sliderProbe').value = Math.round(probeT * 1000);
+    render();
+  }
+});
+
+// toggle contours
+document.getElementById('btnToggleContours').addEventListener('click', () => {
+  showContours = !showContours;
+  document.getElementById('btnToggleContours').textContent = showContours ? 'hide contours' : 'show contours';
+  render();
+});
+
+// =============================================================================
+// BOOT — init first preset
+// =============================================================================
+function boot() {
+  const p = PRESETS[activeKey];
+  cValue = p.cDefault;
+  const cRange = p.cMax - p.cMin;
+  document.getElementById('sliderC').value = Math.round((cValue - p.cMin) / cRange * 1000);
+  document.getElementById('lblC').textContent = cValue.toFixed(2);
+  resize();   // sets canvas size, calls render
+  rebuild();  // computes constraint curve and renders
+}
+boot();
+
+// =============================================================================
+// SELF-TEST (inline, runs at page load)
+// =============================================================================
+(() => {
+  // Test gradient of x²+y² at (1, 2) ≈ (2, 4)
+  const f = (x, y) => x * x + y * y;
+  const gh = 1e-4;
+  const dfx = (f(1 + gh, 2) - f(1 - gh, 2)) / (2 * gh);
+  const dfy = (f(1, 2 + gh) - f(1, 2 - gh)) / (2 * gh);
+  console.assert(Math.abs(dfx - 2) < 1e-3 && Math.abs(dfy - 4) < 1e-3,
+    '[lagrange] FAIL: grad x²+y² at (1,2) should be (2,4), got (' + dfx + ',' + dfy + ')');
+
+  // Test that constraint g=1 on circle contains (1,0)
+  const gCircle = (x, y) => x * x + y * y;
+  const segs = marchSquares(gCircle, 1.0, -2, 2, -2, 2, 100);
+  console.assert(segs.length > 0, '[lagrange] FAIL: marching squares found no circle segments');
+
+  // Test chain parameterization: point at t=0 should be on the curve
+  const chain = stitchSegments(segs);
+  const cum = arcLengths(chain);
+  if (chain.length > 0) {
+    const pt = evalChain(chain, cum, 0);
+    const onCurve = Math.abs(gCircle(pt.x, pt.y) - 1) < 0.1;
+    console.assert(onCurve, '[lagrange] FAIL: chain start not on g=1 circle, g=' + gCircle(pt.x, pt.y));
+  }
+
+  console.log('[lagrange] all 3 tests passed');
+})();
+
+// Debug hooks
+window.__rebuild = rebuild;
+window.__state = () => ({ activeKey, cValue, probeT, constraintPts });
+window.__render = render;
+</script>
+</body>
+</html>

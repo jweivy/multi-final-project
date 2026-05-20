@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Divergence · Vector Field Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin children explicitly. When #customForm is display:none, auto-placement
+     would shift the 1fr track onto footer, squashing scene-wrap to 1px. */
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 180px;
+  }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp  { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  #scene-wrap { display: flex; flex-direction: row; min-height: 0; position: relative; }
+  .pane {
+    position: relative; flex: 1 1 0; min-width: 0; overflow: hidden;
+  }
+  .pane + .pane { border-left: 1px solid var(--pill-border); }
+  .pane canvas { display: block; width: 100% !important; height: 100% !important; cursor: crosshair; }
+  .pane-label {
+    position: absolute; top: 14px; left: 16px;
+    color: var(--soft); font-size: 11px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    pointer-events: none; z-index: 4;
+  }
+
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 310px;
+    z-index: 5;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 16px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 12px; font-style: italic; margin-bottom: 6px; }
+  .overlay .formula .katex { font-size: 1.0em; }
+  .overlay .readouts {
+    font-family: "Courier New", monospace; font-size: 12px;
+    line-height: 1.7; border-top: 1px solid var(--pill-border); padding-top: 8px;
+    margin-top: 6px;
+  }
+  .overlay .readouts .row { display: flex; justify-content: space-between; gap: 12px; }
+  .overlay .readouts .lbl { color: var(--soft); }
+  .overlay .readouts .val { color: var(--gold); }
+  .overlay .readouts .val.pos { color: #ff7a7a; }
+  .overlay .readouts .val.neg { color: var(--blue); }
+  .overlay .readouts .val.zero { color: #9acd7e; }
+  .overlay .plain-caption {
+    margin-top: 8px; font-size: 12px; color: var(--soft); font-style: italic;
+    border-top: 1px solid var(--pill-border); padding-top: 6px;
+  }
+  .overlay .plain-caption b { color: var(--ink); font-style: normal; }
+  .overlay .legend {
+    color: var(--soft); font-size: 11px; margin-top: 8px; line-height: 1.55;
+    border-top: 1px solid var(--pill-border); padding-top: 6px;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  #caption {
+    position: absolute; bottom: 12px; left: 0; right: 0;
+    text-align: center; color: var(--soft); font-size: 12.5px; font-style: italic;
+    pointer-events: none; z-index: 4; padding: 0 24px;
+  }
+
+  footer {
+    padding: 10px 24px; display: flex; gap: 12px; flex-wrap: wrap;
+    align-items: center; border-top: 1px solid var(--pill-border);
+    justify-content: flex-start;
+  }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 18px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+  .footer-hint { color: var(--soft); font-size: 12.5px; font-style: italic; }
+
+  @media (max-width: 900px) {
+    #scene-wrap { flex-direction: column; }
+    .pane + .pane { border-left: none; border-top: 1px solid var(--pill-border); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Divergence</b> · ∇ · F vector field explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="radialOut" class="active">radial outflow</button>
+      <button data-preset="radialIn">radial inflow</button>
+      <button data-preset="rotation">rotation</button>
+      <button data-preset="channel">channel flow</button>
+      <button data-preset="sourceSink">source + sink</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>P(x,y) =</label>
+    <input id="customP" type="text" value="x" placeholder="e.g. x + y">
+    <label>Q(x,y) =</label>
+    <input id="customQ" type="text" value="y" placeholder="e.g. -y + x">
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">F = (P, Q) where P and Q are functions of <b>x</b> and <b>y</b> · use sin, cos, sqrt, exp, abs, ^ for power · pi, e as constants</span>
+  </div>
+
+  <div id="scene-wrap">
+    <!-- LEFT: vector field + divergence heatmap -->
+    <div class="pane" id="paneField">
+      <canvas id="canvasField"></canvas>
+      <div class="pane-label">vector field · divergence heatmap</div>
+      <div class="overlay" id="overlayLeft">
+        <h2><b>Divergence · ∇ · F</b></h2>
+        <div class="formula" id="ovFormula"></div>
+        <div class="readouts">
+          <div class="row"><span class="lbl">F(x,y)</span><span class="val" id="ovF">—</span></div>
+          <div class="row"><span class="lbl">Probe</span><span class="val" id="ovProbe">(1.00, 0.50)</span></div>
+          <div class="row"><span class="lbl">div F at probe</span><span class="val" id="ovDiv">—</span></div>
+        </div>
+        <div class="plain-caption" id="ovCaption">Drag the probe to explore.</div>
+        <div class="legend">
+          <div><span class="swatch" style="background: #c0392b;"></span>red = positive (source / outflow)</div>
+          <div><span class="swatch" style="background: #2471a3;"></span>blue = negative (sink / inflow)</div>
+          <div><span class="swatch" style="background: #3a3f49;"></span>gray = zero (incompressible)</div>
+          <div style="margin-top:4px; font-style:italic;">drag orange dot · see divergence change</div>
+        </div>
+      </div>
+      <div id="caption"></div>
+    </div>
+
+    <!-- RIGHT: fluid patch animation -->
+    <div class="pane" id="panePatch">
+      <canvas id="canvasPatch"></canvas>
+      <div class="pane-label">fluid patch · watch area grow or shrink</div>
+      <div class="overlay" id="overlayRight">
+        <h2 style="font-size:14px;"><b>What divergence means</b></h2>
+        <div style="color:var(--soft); font-size:12px; line-height:1.6; margin-top:4px;">
+          Watch the orange dots — they start inside a disk and drift with the flow.<br><br>
+          <b style="color:var(--ink);">Source (red zone):</b> dots scatter outward.<br>
+          <b style="color:var(--ink);">Sink (blue zone):</b> dots converge inward.<br>
+          <b style="color:var(--ink);">Zero divergence:</b> area stays the same, but the patch may rotate or shear.
+        </div>
+        <div style="margin-top:8px; font-size:11px; color:var(--soft); font-style:italic;">
+          Restarts when you move the probe.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <button class="action ghost" id="btnResetProbe">↺ reset probe</button>
+    <button class="action ghost" id="btnRestartFluid">↻ restart fluid</button>
+    <button class="action" id="btnPlayPause">⏸ pause</button>
+    <span class="footer-hint" id="footerHint">Probe: drag the orange dot on the left.</span>
+  </footer>
+
+</div>
+
+<script type="module">
+// =============================================================================
+// DIVERGENCE EXPLORER — vanilla JS, plain 2D canvas (no Three.js needed here)
+// =============================================================================
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function prettyNumber(v) {
+  if (!isFinite(v)) return 'NaN';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 0.001 && a < 10000) return v.toFixed(3);
+  const exp = Math.floor(Math.log10(a));
+  const man = v / Math.pow(10, exp);
+  const expStr = exp < 0
+    ? exp.toString().split('').map((c, i) => i === 0 ? '⁻' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c] ?? c).join('')
+    : exp.toString().split('').map(c => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c] ?? c).join('');
+  return `${man.toFixed(2)} × 10${expStr}`;
+}
+
+function renderMath(el, latex) {
+  if (window.katex) {
+    try { katex.render(latex, el, { throwOnError: false, displayMode: false }); return; }
+    catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+function compileExpr(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  for (const [tx, ty] of [[0.5, 0.3], [-0.4, 0.8], [0.1, -0.6]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives a non-number at (${tx}, ${ty})`);
+  }
+  return fn;
+}
+
+// ── PRESETS ──────────────────────────────────────────────────────────────────
+const DOMAIN = 3; // x,y in [-3, 3]
+const PRESETS = {
+  radialOut: {
+    label: 'Radial outflow',
+    fLabel: 'F = (x, y)',
+    latex: '\\mathbf{F} = (x,\\, y)',
+    P: (x, y) => x,
+    Q: (x, y) => y,
+    divAnalytic: (x, y) => 2,
+    caption: 'Fluid spreads outward from the origin — pure source. Every point has div = +2.',
+  },
+  radialIn: {
+    label: 'Radial inflow',
+    fLabel: 'F = (−x, −y)',
+    latex: '\\mathbf{F} = (-x,\\, -y)',
+    P: (x, y) => -x,
+    Q: (x, y) => -y,
+    divAnalytic: (x, y) => -2,
+    caption: 'Fluid converges toward the origin — pure sink. Every point has div = −2.',
+  },
+  rotation: {
+    label: 'Pure rotation',
+    fLabel: 'F = (−y, x)',
+    latex: '\\mathbf{F} = (-y,\\, x)',
+    P: (x, y) => -y,
+    Q: (x, y) => x,
+    divAnalytic: (x, y) => 0,
+    caption: 'Pure rotation — fluid spins but never spreads out or converges. Divergence = 0 everywhere.',
+  },
+  channel: {
+    label: 'Channel flow',
+    fLabel: 'F = (1 − y², 0)',
+    latex: '\\mathbf{F} = (1 - y^2,\\, 0)',
+    P: (x, y) => 1 - y * y,
+    Q: (x, y) => 0,
+    divAnalytic: (x, y) => 0,
+    caption: 'Water flowing through a pipe — faster in the middle, slow at the edges. Divergence = 0: the flow is incompressible.',
+  },
+  sourceSink: {
+    label: 'Source + sink',
+    fLabel: 'F = (x, y) / (r² + 0.3)',
+    latex: '\\mathbf{F} = \\dfrac{(x,\\,y)}{x^2+y^2+0.3}',
+    P: (x, y) => x / (x * x + y * y + 0.3),
+    Q: (x, y) => y / (x * x + y * y + 0.3),
+    divAnalytic: null, // uses numeric
+    caption: 'Strong source near the origin, weaker flow further out. Watch the red patch shrink as you move the probe outward.',
+  },
+  custom: {
+    label: 'Custom',
+    fLabel: 'F = (P, Q)',
+    latex: '\\mathbf{F} = (P(x,y),\\, Q(x,y))',
+    P: (x, y) => x,
+    Q: (x, y) => y,
+    divAnalytic: null,
+    caption: 'Your custom vector field.',
+  },
+};
+
+let activeKey = 'radialOut';
+
+// ── DIVERGENCE MATH ──────────────────────────────────────────────────────────
+function divNumeric(P, Q, x, y, h = 1e-4) {
+  const dPdx = (P(x + h, y) - P(x - h, y)) / (2 * h);
+  const dQdy = (Q(x, y + h) - Q(x, y - h)) / (2 * h);
+  return dPdx + dQdy;
+}
+
+function divAt(preset, x, y) {
+  if (preset.divAnalytic) return preset.divAnalytic(x, y);
+  return divNumeric(preset.P, preset.Q, x, y);
+}
+
+// ── HEATMAP SAMPLING ─────────────────────────────────────────────────────────
+// Returns a Float32Array of divergence values on a GRID_N × GRID_N lattice
+const GRID_N = 200;
+function buildDivGrid(preset) {
+  const vals = new Float32Array(GRID_N * GRID_N);
+  let mn = Infinity, mx = -Infinity;
+  for (let j = 0; j < GRID_N; j++) {
+    const y = -DOMAIN + (2 * DOMAIN * j) / (GRID_N - 1);
+    for (let i = 0; i < GRID_N; i++) {
+      const x = -DOMAIN + (2 * DOMAIN * i) / (GRID_N - 1);
+      const v = divAt(preset, x, y);
+      vals[j * GRID_N + i] = isFinite(v) ? v : 0;
+      if (vals[j * GRID_N + i] < mn) mn = vals[j * GRID_N + i];
+      if (vals[j * GRID_N + i] > mx) mx = vals[j * GRID_N + i];
+    }
+  }
+  return { vals, mn, mx };
+}
+
+// Bilinear interpolation on divGrid
+function divBilerp(gridData, x, y) {
+  const { vals } = gridData;
+  const u = (x + DOMAIN) / (2 * DOMAIN) * (GRID_N - 1);
+  const v = (y + DOMAIN) / (2 * DOMAIN) * (GRID_N - 1);
+  const i = Math.max(0, Math.min(GRID_N - 2, Math.floor(u)));
+  const j = Math.max(0, Math.min(GRID_N - 2, Math.floor(v)));
+  const fu = u - i, fv = v - j;
+  const v00 = vals[j * GRID_N + i],     v10 = vals[j * GRID_N + (i + 1)];
+  const v01 = vals[(j + 1) * GRID_N + i], v11 = vals[(j + 1) * GRID_N + (i + 1)];
+  return (1 - fu) * (1 - fv) * v00 + fu * (1 - fv) * v10 +
+         (1 - fu) * fv * v01 + fu * fv * v11;
+}
+
+// ── HEATMAP IMAGEDATA ─────────────────────────────────────────────────────────
+// Diverging colormap: deep blue (most negative) → dark gray (zero) → deep red (most positive)
+function divColor(t, r, g, b) {
+  // t ∈ [-1, 1], clamped. Negative → blue, positive → red, zero → #1e2329 (dark neutral)
+  t = Math.max(-1, Math.min(1, t));
+  if (t > 0) {
+    // neutral → red
+    r[0] = Math.round(30 + 172 * t);
+    g[0] = Math.round(35 - 35 * t);
+    b[0] = Math.round(41 - 41 * t);
+  } else {
+    const s = -t;
+    r[0] = Math.round(30 - 30 * s);
+    g[0] = Math.round(35 + 33 * s);
+    b[0] = Math.round(41 + 122 * s);
+  }
+}
+
+function buildHeatmapImageData(gridData, W, H) {
+  const { vals, mn, mx } = gridData;
+  const img = new ImageData(W, H);
+  const data = img.data;
+  const scale = Math.max(1e-9, Math.max(Math.abs(mn), Math.abs(mx)));
+  const r = [0], g = [0], b = [0];
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      // map pixel → grid index via bilinear
+      const gi = (px / (W - 1)) * (GRID_N - 1);
+      const gj = (py / (H - 1)) * (GRID_N - 1);  // py=0 → top → y=+DOMAIN
+      const ii = Math.max(0, Math.min(GRID_N - 2, Math.floor(gi)));
+      const jj = Math.max(0, Math.min(GRID_N - 2, Math.floor(gj)));
+      const fu = gi - ii, fv = gj - jj;
+      // note: j=0 in grid is y=-DOMAIN (bottom), but py=0 is top of canvas
+      // so we flip j
+      const jFlip = (GRID_N - 1) - jj;
+      const jFlip1 = Math.max(0, jFlip - 1);
+      const v00 = vals[jFlip * GRID_N + ii],       v10 = vals[jFlip * GRID_N + (ii + 1)];
+      const v01 = vals[jFlip1 * GRID_N + ii], v11 = vals[jFlip1 * GRID_N + (ii + 1)];
+      const dv = (1 - fu) * (1 - fv) * v00 + fu * (1 - fv) * v10 +
+                 (1 - fu) * fv * v01 + fu * fv * v11;
+      const t = dv / scale;
+      divColor(t, r, g, b);
+      const idx = (py * W + px) * 4;
+      data[idx]     = r[0];
+      data[idx + 1] = g[0];
+      data[idx + 2] = b[0];
+      data[idx + 3] = 255;
+    }
+  }
+  return img;
+}
+
+// ── CANVASES & STATE ──────────────────────────────────────────────────────────
+const canvasField = document.getElementById('canvasField');
+const ctxField    = canvasField.getContext('2d');
+const canvasPatch = document.getElementById('canvasPatch');
+const ctxPatch    = canvasPatch.getContext('2d');
+
+const paneField = document.getElementById('paneField');
+const panePatch = document.getElementById('panePatch');
+
+let probe = { x: 1.0, y: 0.5 };
+let probeDown = false;
+
+let playing = true;
+let gridData = null;
+let heatmapOffscreen = null; // offscreen canvas for the heatmap
+
+// Fluid patch dots
+const N_DOTS = 30;
+const PATCH_R = 0.6; // in domain units
+let dots = [];
+let patchAge = 0;
+const PATCH_LIFETIME = 3; // seconds before restart
+let lastTime = performance.now();
+
+// Animation clock for probe pulse
+let animTime = 0;
+
+// ── COORDINATE CONVERSIONS ────────────────────────────────────────────────────
+function domainToCanvas(x, y, canvas) {
+  const w = canvas.width, h = canvas.height;
+  const cx = (x + DOMAIN) / (2 * DOMAIN) * w;
+  const cy = (1 - (y + DOMAIN) / (2 * DOMAIN)) * h; // flip y
+  return [cx, cy];
+}
+function canvasToDomain(cx, cy, canvas) {
+  const w = canvas.width, h = canvas.height;
+  const x = (cx / w) * 2 * DOMAIN - DOMAIN;
+  const y = -((cy / h) * 2 * DOMAIN - DOMAIN); // flip y
+  return [x, y];
+}
+function domainUnitToPixels(canvas) {
+  return canvas.width / (2 * DOMAIN);
+}
+
+// ── FLUID DOTS ────────────────────────────────────────────────────────────────
+function spawnDots() {
+  dots = [];
+  for (let i = 0; i < N_DOTS; i++) {
+    // uniform random in disk
+    let dx, dy;
+    do {
+      dx = (Math.random() * 2 - 1) * PATCH_R;
+      dy = (Math.random() * 2 - 1) * PATCH_R;
+    } while (dx * dx + dy * dy > PATCH_R * PATCH_R);
+    dots.push({ x: probe.x + dx, y: probe.y + dy });
+  }
+  patchAge = 0;
+}
+
+function stepDots(dt, preset) {
+  const DT = Math.min(dt, 0.05); // cap for stability
+  for (let i = 0; i < dots.length; i++) {
+    const d = dots[i];
+    const vx = preset.P(d.x, d.y);
+    const vy = preset.Q(d.x, d.y);
+    // clamp velocity so dots don't teleport
+    const spd = Math.sqrt(vx * vx + vy * vy);
+    const maxSpd = 4;
+    const scale = spd > maxSpd ? maxSpd / spd : 1;
+    d.x += vx * scale * DT;
+    d.y += vy * scale * DT;
+    // respawn if too far from probe origin
+    const px = d.x - probe.x, py = d.y - probe.y;
+    if (Math.sqrt(px * px + py * py) > PATCH_R * 4 ||
+        Math.abs(d.x) > DOMAIN * 1.5 || Math.abs(d.y) > DOMAIN * 1.5) {
+      let dx, dy;
+      do {
+        dx = (Math.random() * 2 - 1) * PATCH_R;
+        dy = (Math.random() * 2 - 1) * PATCH_R;
+      } while (dx * dx + dy * dy > PATCH_R * PATCH_R);
+      d.x = probe.x + dx; d.y = probe.y + dy;
+    }
+  }
+}
+
+// ── OFFSCREEN HEATMAP ─────────────────────────────────────────────────────────
+function buildOffscreenHeatmap(W, H) {
+  const oc = document.createElement('canvas');
+  oc.width = W; oc.height = H;
+  const octx = oc.getContext('2d');
+  const img = buildHeatmapImageData(gridData, W, H);
+  octx.putImageData(img, 0, 0);
+  heatmapOffscreen = oc;
+}
+
+// ── DRAW FIELD PANE ───────────────────────────────────────────────────────────
+const ARROW_GRID = 17; // number of arrows per axis
+
+function drawFieldPane(preset) {
+  const W = canvasField.width, H = canvasField.height;
+  ctxField.clearRect(0, 0, W, H);
+
+  // 1. Heatmap
+  if (heatmapOffscreen) {
+    ctxField.drawImage(heatmapOffscreen, 0, 0, W, H);
+  }
+
+  // 2. Coordinate axes
+  const [ax0, ay0] = domainToCanvas(-DOMAIN, 0, canvasField);
+  const [ax1, ay1] = domainToCanvas(DOMAIN, 0, canvasField);
+  const [ax2, ay2] = domainToCanvas(0, -DOMAIN, canvasField);
+  const [ax3, ay3] = domainToCanvas(0, DOMAIN, canvasField);
+  ctxField.save();
+  ctxField.strokeStyle = 'rgba(90,100,115,0.55)';
+  ctxField.lineWidth = 1;
+  ctxField.beginPath();
+  ctxField.moveTo(ax0, ay0); ctxField.lineTo(ax1, ay1);
+  ctxField.moveTo(ax2, ay2); ctxField.lineTo(ax3, ay3);
+  ctxField.stroke();
+  ctxField.restore();
+
+  // 3. Arrow grid
+  const step = (2 * DOMAIN) / (ARROW_GRID - 1);
+  const pxPerUnit = domainUnitToPixels(canvasField);
+  const arrowLen = pxPerUnit * 0.28; // base max arrow length in pixels
+  ctxField.save();
+  ctxField.strokeStyle = 'rgba(160,170,185,0.45)';
+  ctxField.fillStyle   = 'rgba(160,170,185,0.45)';
+  ctxField.lineWidth = 1;
+  for (let j = 0; j < ARROW_GRID; j++) {
+    const y = -DOMAIN + step * j;
+    for (let i = 0; i < ARROW_GRID; i++) {
+      const x = -DOMAIN + step * i;
+      const vx = preset.P(x, y);
+      const vy = preset.Q(x, y);
+      const spd = Math.sqrt(vx * vx + vy * vy);
+      if (spd < 1e-8) continue;
+      const nx = vx / spd, ny = vy / spd;
+      const scaledLen = Math.min(arrowLen, arrowLen * (0.3 + 0.7 * Math.min(1, spd / 3)));
+      const [cx, cy] = domainToCanvas(x, y, canvasField);
+      // tail and head of arrow — note: y-axis is flipped in canvas
+      const tx = cx - nx * scaledLen * 0.5;
+      const ty = cy + ny * scaledLen * 0.5; // canvas y inverted
+      const hx = cx + nx * scaledLen * 0.5;
+      const hy = cy - ny * scaledLen * 0.5;
+      drawArrow(ctxField, tx, ty, hx, hy, scaledLen * 0.22);
+    }
+  }
+  ctxField.restore();
+
+  // 4. Probe circle (pulsing)
+  const dv = divAt(preset, probe.x, probe.y);
+  const baseR = 9;
+  const pulse = dv !== 0
+    ? baseR + 4 * Math.sin(animTime * Math.sign(dv)) * Math.min(1, Math.abs(dv) / 4)
+    : baseR;
+  const [px, py] = domainToCanvas(probe.x, probe.y, canvasField);
+  ctxField.save();
+  ctxField.beginPath();
+  ctxField.arc(px, py, Math.max(4, pulse), 0, Math.PI * 2);
+  ctxField.fillStyle = '#ff8a3d';
+  ctxField.fill();
+  ctxField.strokeStyle = '#fff';
+  ctxField.lineWidth = 1.5;
+  ctxField.stroke();
+  ctxField.restore();
+
+  // 5. Radial arrows around probe showing local deformation
+  const dv8 = divAt(preset, probe.x, probe.y);
+  const arrowR = pxPerUnit * 0.35;
+  const N_RADIAL = 8;
+  for (let k = 0; k < N_RADIAL; k++) {
+    const angle = (k / N_RADIAL) * 2 * Math.PI;
+    const ax = Math.cos(angle), ay = Math.sin(angle);
+    // arrow direction: outward if div>0, inward if div<0
+    const sign = Math.sign(dv8);
+    const strength = Math.min(1, Math.abs(dv8) / 4);
+    if (strength < 0.02) continue;
+    const rr = arrowR * strength;
+    // for source: tip points outward; for sink: tip points inward (reverse)
+    let tx_px, ty_px, hx_px, hy_px;
+    if (sign > 0) {
+      tx_px = px + ax * arrowR * 0.3;
+      ty_px = py - ay * arrowR * 0.3;
+      hx_px = px + ax * (arrowR * 0.3 + rr);
+      hy_px = py - ay * (arrowR * 0.3 + rr);
+    } else {
+      tx_px = px + ax * (arrowR * 0.3 + rr);
+      ty_px = py - ay * (arrowR * 0.3 + rr);
+      hx_px = px + ax * arrowR * 0.3;
+      hy_px = py - ay * arrowR * 0.3;
+    }
+    ctxField.save();
+    ctxField.strokeStyle = sign > 0 ? 'rgba(255,100,100,0.75)' : 'rgba(80,160,255,0.75)';
+    ctxField.fillStyle   = sign > 0 ? 'rgba(255,100,100,0.75)' : 'rgba(80,160,255,0.75)';
+    ctxField.lineWidth = 1.5;
+    drawArrow(ctxField, tx_px, ty_px, hx_px, hy_px, 5);
+    ctxField.restore();
+  }
+}
+
+function drawArrow(ctx, x0, y0, x1, y1, headLen) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const angle = Math.atan2(dy, dx);
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  // arrowhead
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - headLen * Math.cos(angle - 0.45), y1 - headLen * Math.sin(angle - 0.45));
+  ctx.lineTo(x1 - headLen * Math.cos(angle + 0.45), y1 - headLen * Math.sin(angle + 0.45));
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── DRAW PATCH PANE ───────────────────────────────────────────────────────────
+function drawPatchPane(preset) {
+  const W = canvasPatch.width, H = canvasPatch.height;
+  ctxPatch.clearRect(0, 0, W, H);
+
+  // Background
+  ctxPatch.fillStyle = '#0e1116';
+  ctxPatch.fillRect(0, 0, W, H);
+
+  // Faint grid
+  const pxPerUnit = domainUnitToPixels(canvasPatch);
+  ctxPatch.save();
+  ctxPatch.strokeStyle = 'rgba(40,46,55,0.8)';
+  ctxPatch.lineWidth = 1;
+  ctxPatch.beginPath();
+  for (let gx = -DOMAIN; gx <= DOMAIN + 0.01; gx += 1) {
+    const [cx0] = domainToCanvas(gx, -DOMAIN, canvasPatch);
+    const [cx1, cy1] = domainToCanvas(gx, DOMAIN, canvasPatch);
+    ctxPatch.moveTo(cx0, H); ctxPatch.lineTo(cx1, cy1);
+  }
+  for (let gy = -DOMAIN; gy <= DOMAIN + 0.01; gy += 1) {
+    const [x0, y0] = domainToCanvas(-DOMAIN, gy, canvasPatch);
+    const [x1, y1] = domainToCanvas(DOMAIN, gy, canvasPatch);
+    ctxPatch.moveTo(x0, y0); ctxPatch.lineTo(x1, y1);
+  }
+  ctxPatch.stroke();
+  ctxPatch.restore();
+
+  // Axes
+  const [axF0, ayF0] = domainToCanvas(-DOMAIN, 0, canvasPatch);
+  const [axF1, ayF1] = domainToCanvas(DOMAIN, 0, canvasPatch);
+  const [axF2, ayF2] = domainToCanvas(0, -DOMAIN, canvasPatch);
+  const [axF3, ayF3] = domainToCanvas(0, DOMAIN, canvasPatch);
+  ctxPatch.save();
+  ctxPatch.strokeStyle = 'rgba(90,100,115,0.5)';
+  ctxPatch.lineWidth = 1;
+  ctxPatch.beginPath();
+  ctxPatch.moveTo(axF0, ayF0); ctxPatch.lineTo(axF1, ayF1);
+  ctxPatch.moveTo(axF2, ayF2); ctxPatch.lineTo(axF3, ayF3);
+  ctxPatch.stroke();
+  ctxPatch.restore();
+
+  // Initial disk (faint ring to show where dots started)
+  const [pcx, pcy] = domainToCanvas(probe.x, probe.y, canvasPatch);
+  const diskR = PATCH_R * pxPerUnit;
+  ctxPatch.save();
+  ctxPatch.strokeStyle = 'rgba(255,209,102,0.18)';
+  ctxPatch.lineWidth = 1.5;
+  ctxPatch.setLineDash([4, 4]);
+  ctxPatch.beginPath();
+  ctxPatch.arc(pcx, pcy, diskR, 0, Math.PI * 2);
+  ctxPatch.stroke();
+  ctxPatch.restore();
+
+  // Probe center marker
+  ctxPatch.save();
+  ctxPatch.beginPath();
+  ctxPatch.arc(pcx, pcy, 5, 0, Math.PI * 2);
+  ctxPatch.fillStyle = '#ff8a3d';
+  ctxPatch.fill();
+  ctxPatch.restore();
+
+  // Flow arrows (background, faint)
+  const PARROW = 11;
+  const stepP = (2 * DOMAIN) / (PARROW - 1);
+  ctxPatch.save();
+  ctxPatch.strokeStyle = 'rgba(90,100,115,0.3)';
+  ctxPatch.fillStyle   = 'rgba(90,100,115,0.3)';
+  ctxPatch.lineWidth = 1;
+  const arrowLenP = pxPerUnit * 0.28;
+  for (let j = 0; j < PARROW; j++) {
+    const y = -DOMAIN + stepP * j;
+    for (let i = 0; i < PARROW; i++) {
+      const x = -DOMAIN + stepP * i;
+      const vx = preset.P(x, y);
+      const vy = preset.Q(x, y);
+      const spd = Math.sqrt(vx * vx + vy * vy);
+      if (spd < 1e-8) continue;
+      const nx = vx / spd, ny = vy / spd;
+      const scaledLen = Math.min(arrowLenP, arrowLenP * (0.3 + 0.7 * Math.min(1, spd / 3)));
+      const [cx, cy_] = domainToCanvas(x, y, canvasPatch);
+      const tx = cx - nx * scaledLen * 0.5;
+      const ty = cy_ + ny * scaledLen * 0.5;
+      const hx = cx + nx * scaledLen * 0.5;
+      const hy = cy_ - ny * scaledLen * 0.5;
+      drawArrow(ctxPatch, tx, ty, hx, hy, scaledLen * 0.22);
+    }
+  }
+  ctxPatch.restore();
+
+  // Fluid dots
+  const dv = divAt(preset, probe.x, probe.y);
+  let dotColor;
+  if (dv > 0.1)       dotColor = 'rgba(255, 140, 60, 0.9)';
+  else if (dv < -0.1) dotColor = 'rgba(100, 180, 255, 0.9)';
+  else                 dotColor = 'rgba(180, 215, 150, 0.9)';
+
+  ctxPatch.save();
+  for (const d of dots) {
+    const [cx, cy_] = domainToCanvas(d.x, d.y, canvasPatch);
+    ctxPatch.beginPath();
+    ctxPatch.arc(cx, cy_, 3.5, 0, Math.PI * 2);
+    ctxPatch.fillStyle = dotColor;
+    ctxPatch.fill();
+  }
+  ctxPatch.restore();
+}
+
+// ── UPDATE OVERLAY ─────────────────────────────────────────────────────────────
+function updateOverlay(preset) {
+  const dv = divAt(preset, probe.x, probe.y);
+  const dvStr = prettyNumber(dv);
+
+  // formula
+  const fmEl = document.getElementById('ovFormula');
+  renderMath(fmEl, '\\nabla \\cdot \\mathbf{F} = \\dfrac{\\partial P}{\\partial x} + \\dfrac{\\partial Q}{\\partial y}');
+
+  // F(x,y) label
+  document.getElementById('ovF').textContent = preset.fLabel;
+
+  // probe position
+  document.getElementById('ovProbe').textContent =
+    `(${prettyNumber(probe.x)}, ${prettyNumber(probe.y)})`;
+
+  // div value, color-coded
+  const divEl = document.getElementById('ovDiv');
+  divEl.textContent = dvStr;
+  divEl.className = 'val ' + (dv > 0.05 ? 'pos' : dv < -0.05 ? 'neg' : 'zero');
+
+  // plain-language caption
+  const capEl = document.getElementById('ovCaption');
+  if (dv > 0.05)       capEl.innerHTML = '<b>Fluid is spreading out here</b> — this is a source.';
+  else if (dv < -0.05) capEl.innerHTML = '<b>Fluid is converging here</b> — this is a sink.';
+  else                  capEl.innerHTML = '<b>Zero divergence here</b> — fluid neither spreads nor contracts.';
+
+  // footer hint
+  document.getElementById('footerHint').textContent =
+    `Probe at (${prettyNumber(probe.x)}, ${prettyNumber(probe.y)}) · div F = ${dvStr}`;
+
+  // preset caption below field
+  document.getElementById('caption').textContent = preset.caption;
+}
+
+// ── RESIZE ─────────────────────────────────────────────────────────────────────
+function resize() {
+  for (const [canvas, pane] of [[canvasField, paneField], [canvasPatch, panePatch]]) {
+    const w = Math.max(120, pane.clientWidth);
+    const h = Math.max(120, pane.clientHeight);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  // Rebuild offscreen heatmap at new size
+  if (gridData) buildOffscreenHeatmap(canvasField.width, canvasField.height);
+}
+window.addEventListener('resize', () => { resize(); });
+
+// ── PROBE DRAGGING ─────────────────────────────────────────────────────────────
+canvasField.addEventListener('pointerdown', e => {
+  probeDown = true;
+  canvasField.setPointerCapture(e.pointerId);
+  const r = canvasField.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const [nx, ny] = canvasToDomain(cx * (canvasField.width / r.width),
+                                   cy * (canvasField.height / r.height), canvasField);
+  probe.x = Math.max(-DOMAIN, Math.min(DOMAIN, nx));
+  probe.y = Math.max(-DOMAIN, Math.min(DOMAIN, ny));
+  spawnDots();
+});
+canvasField.addEventListener('pointermove', e => {
+  if (!probeDown) return;
+  const r = canvasField.getBoundingClientRect();
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const [nx, ny] = canvasToDomain(cx * (canvasField.width / r.width),
+                                   cy * (canvasField.height / r.height), canvasField);
+  probe.x = Math.max(-DOMAIN, Math.min(DOMAIN, nx));
+  probe.y = Math.max(-DOMAIN, Math.min(DOMAIN, ny));
+});
+canvasField.addEventListener('pointerup', e => {
+  probeDown = false;
+  try { canvasField.releasePointerCapture(e.pointerId); } catch (_) {}
+  spawnDots();
+});
+
+// ── PRESET SWITCHING ──────────────────────────────────────────────────────────
+document.querySelectorAll('.presets button').forEach(b => {
+  b.addEventListener('click', () => {
+    activeKey = b.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(x =>
+      x.classList.toggle('active', x === b));
+    const showCustom = activeKey === 'custom';
+    document.getElementById('customForm').classList.toggle('shown', showCustom);
+    rebuildField();
+    spawnDots();
+  });
+});
+
+document.getElementById('customApply').addEventListener('click', applyCustom);
+['customP', 'customQ'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyCustom();
+  });
+});
+
+function applyCustom() {
+  const err = document.getElementById('customError');
+  err.textContent = '';
+  let P, Q;
+  try { P = compileExpr(document.getElementById('customP').value); }
+  catch (e) { err.textContent = 'P: ' + e.message; return; }
+  try { Q = compileExpr(document.getElementById('customQ').value); }
+  catch (e) { err.textContent = 'Q: ' + e.message; return; }
+  const rawP = document.getElementById('customP').value.trim();
+  const rawQ = document.getElementById('customQ').value.trim();
+  PRESETS.custom = {
+    label: 'Custom',
+    fLabel: `F = (${rawP}, ${rawQ})`,
+    latex: `\\mathbf{F} = (${rawP},\\, ${rawQ})`,
+    P, Q,
+    divAnalytic: null,
+    caption: `Custom field: P = ${rawP}, Q = ${rawQ}`,
+  };
+  if (activeKey === 'custom') {
+    rebuildField();
+    spawnDots();
+  } else {
+    document.querySelectorAll('.presets button').forEach(x =>
+      x.classList.toggle('active', x.dataset.preset === 'custom'));
+    activeKey = 'custom';
+    document.getElementById('customForm').classList.add('shown');
+    rebuildField();
+    spawnDots();
+  }
+}
+
+// ── REBUILD (on preset change) ─────────────────────────────────────────────────
+function rebuildField() {
+  const preset = PRESETS[activeKey];
+  gridData = buildDivGrid(preset);
+  buildOffscreenHeatmap(canvasField.width, canvasField.height);
+}
+
+// ── CONTROLS ──────────────────────────────────────────────────────────────────
+document.getElementById('btnResetProbe').addEventListener('click', () => {
+  probe.x = 1.0; probe.y = 0.5;
+  spawnDots();
+});
+document.getElementById('btnRestartFluid').addEventListener('click', spawnDots);
+document.getElementById('btnPlayPause').addEventListener('click', () => {
+  playing = !playing;
+  document.getElementById('btnPlayPause').textContent = playing ? '⏸ pause' : '▶ play';
+  if (playing) lastTime = performance.now();
+});
+
+// ── ANIMATION LOOP ─────────────────────────────────────────────────────────────
+function tick() {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+
+  const preset = PRESETS[activeKey];
+
+  if (playing) {
+    animTime += dt * 3; // pulse speed
+    patchAge += dt;
+    if (patchAge > PATCH_LIFETIME) spawnDots();
+    stepDots(dt, preset);
+  }
+
+  resize(); // catches first frame + any layout shifts
+
+  drawFieldPane(preset);
+  drawPatchPane(preset);
+  updateOverlay(preset);
+
+  requestAnimationFrame(tick);
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+resize();
+rebuildField();
+spawnDots();
+tick();
+
+// ── INLINE SELF-TEST ──────────────────────────────────────────────────────────
+(() => {
+  const radial = { P: (x, y) => x, Q: (x, y) => y, divAnalytic: null };
+  const dv = divAt(radial, 0.5, -0.3);
+  console.assert(Math.abs(dv - 2) < 1e-3,
+    `[divergence] radial div test FAILED: got ${dv}, expected 2`);
+
+  const rotation = { P: (x, y) => -y, Q: (x, y) => x, divAnalytic: null };
+  const dvRot = divAt(rotation, 1, 1);
+  console.assert(Math.abs(dvRot) < 1e-3,
+    `[divergence] rotation div test FAILED: got ${dvRot}, expected 0`);
+
+  const channel = { P: (x, y) => 1 - y * y, Q: (x, y) => 0, divAnalytic: null };
+  const dvChan = divAt(channel, 0.7, 0.5);
+  console.assert(Math.abs(dvChan) < 1e-3,
+    `[divergence] channel div test FAILED: got ${dvChan}, expected 0`);
+
+  console.log('[divergence] all 3 tests passed');
+})();
+
+// ── DEBUG HOOKS ───────────────────────────────────────────────────────────────
+window.__probe    = () => probe;
+window.__gridData = () => gridData;
+window.__rebuild  = () => { rebuildField(); spawnDots(); };
+window.__state    = () => ({ probe, activeKey, playing, patchAge });
+
+</script>
+</body>
+</html>

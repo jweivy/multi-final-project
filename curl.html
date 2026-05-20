@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curl · ∇ × F · Vector Field Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1116;
+    --ink: #e8e6df;
+    --soft: #7a8794;
+    --gold: #ffd166;
+    --blue: #6aa9ff;
+    --rose: #ff7eb6;
+    --pill: #15181d;
+    --pill-border: #23272d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: Georgia, "Source Serif Pro", serif;
+    overflow: hidden;
+  }
+  #app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+  /* Pin children explicitly. When #customForm is display:none, auto-placement
+     would shift the 1fr track onto footer, squashing scene-wrap to 1px. */
+  #app > header      { grid-row: 1; }
+  #app > #customForm { grid-row: 2; }
+  #app > #scene-wrap { grid-row: 3; min-height: 0; }
+  #app > footer      { grid-row: 4; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-bottom: 1px solid var(--pill-border);
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: normal; color: #ddd; letter-spacing: 0.3px; }
+  header h1 b { color: var(--gold); }
+  .home-link {
+    color: var(--soft); text-decoration: none; font-size: 13px;
+    border: 1px solid var(--pill-border); border-radius: 14px;
+    padding: 5px 12px; transition: all 0.15s; white-space: nowrap;
+  }
+  .home-link:hover { color: var(--gold); border-color: var(--gold); }
+  .header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button {
+    background: var(--pill); color: var(--soft);
+    border: 1px solid var(--pill-border); padding: 7px 14px;
+    border-radius: 18px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .presets button:hover { color: #fff; border-color: var(--gold); }
+  .presets button.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+
+  #customForm {
+    display: none; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 10px 24px; border-bottom: 1px solid var(--pill-border);
+    background: rgba(255, 209, 102, 0.05); font-size: 13px;
+  }
+  #customForm.shown { display: flex; }
+  #customForm label { color: var(--soft); }
+  #customForm input[type=text] {
+    background: var(--pill); color: var(--ink);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 10px; font-family: "Courier New", monospace; font-size: 13px;
+    outline: none; width: 200px;
+  }
+  #customForm input[type=text]:focus { border-color: var(--gold); }
+  #customForm button {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 6px 14px; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-weight: bold; font-size: 13px;
+  }
+  #customError { color: #ff6f6f; font-size: 12px; font-style: italic; flex-basis: 100%; }
+  #customHelp { color: var(--soft); font-size: 11px; font-style: italic; flex-basis: 100%; }
+  #customHelp b { color: var(--ink); font-weight: normal; font-family: "Courier New", monospace; }
+
+  #scene-wrap { display: flex; flex-direction: row; min-height: 0; position: relative; }
+  .pane {
+    position: relative; flex: 1 1 0; min-width: 0; overflow: hidden;
+  }
+  .pane + .pane { border-left: 1px solid var(--pill-border); }
+  .pane canvas { display: block; width: 100% !important; height: 100% !important; }
+  .pane-label {
+    position: absolute; top: 14px; left: 16px;
+    color: var(--soft); font-size: 11px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .overlay {
+    position: absolute; top: 14px; right: 16px;
+    background: rgba(14, 17, 22, 0.82);
+    border: 1px solid var(--pill-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+    max-width: 300px;
+    z-index: 10;
+  }
+  .overlay h2 { margin: 0 0 4px; font-size: 16px; font-weight: normal; color: var(--ink); }
+  .overlay h2 b { color: var(--gold); }
+  .overlay .formula { color: var(--soft); font-size: 11.5px; margin-bottom: 6px; line-height: 1.5; }
+  .overlay .formula .katex { font-size: 1em; }
+  .overlay .legend {
+    color: var(--soft); font-size: 11px; margin-top: 8px; line-height: 1.6;
+  }
+  .overlay .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px;
+  }
+
+  .probe-stats {
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--pill-border);
+    font-family: "Courier New", monospace;
+    font-size: 11.5px; line-height: 1.6;
+  }
+  .probe-stats .row { display: flex; justify-content: space-between; gap: 10px; }
+  .probe-stats .val-gold { color: var(--gold); }
+  .probe-stats .val-rose { color: var(--rose); }
+  .probe-stats .val-soft { color: var(--soft); }
+  .probe-stats .lbl-soft {
+    color: var(--soft); font-style: italic; font-size: 10.5px; margin-bottom: 3px;
+  }
+  .probe-stats .interp {
+    margin-top: 5px; font-size: 11px; font-style: italic;
+    color: var(--ink); padding: 4px 6px;
+    border-radius: 5px; background: rgba(255,255,255,0.05);
+  }
+
+  .preset-caption {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(14, 17, 22, 0.8);
+    border: 1px solid var(--pill-border); border-radius: 8px;
+    padding: 6px 14px; color: var(--soft); font-size: 12px; font-style: italic;
+    pointer-events: none; white-space: nowrap; z-index: 10;
+  }
+
+  /* Right pane — indicator panel */
+  #pane-indicator {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0; padding: 24px;
+    max-width: 340px;
+    flex: 0 0 340px;
+  }
+  #indicator-canvas {
+    display: block;
+    width: 220px !important; height: 220px !important;
+    flex-shrink: 0;
+  }
+  .indicator-label {
+    text-align: center; margin-top: 10px;
+  }
+  .indicator-label .curl-val {
+    font-size: 28px; font-family: "Courier New", monospace;
+    font-weight: bold; color: var(--gold);
+    transition: color 0.2s;
+  }
+  .indicator-label .curl-val.neg { color: var(--blue); }
+  .indicator-label .curl-desc {
+    font-size: 13px; color: var(--soft); margin-top: 4px;
+    font-style: italic;
+  }
+  .indicator-label .arc-desc {
+    font-size: 11px; margin-top: 6px;
+    padding: 4px 12px; border-radius: 14px;
+    border: 1px solid var(--pill-border);
+    display: inline-block;
+  }
+  .indicator-label .arc-desc.ccw { color: var(--rose); border-color: var(--rose); }
+  .indicator-label .arc-desc.cw  { color: var(--blue); border-color: var(--blue); }
+  .indicator-label .arc-desc.zero { color: var(--soft); }
+
+  footer {
+    padding: 10px 24px; display: flex;
+    gap: 14px; align-items: center;
+    border-top: 1px solid var(--pill-border);
+    flex-wrap: wrap;
+  }
+  footer .lbl { color: var(--soft); font-size: 13px; }
+  button.action {
+    background: var(--gold); color: var(--bg); border: none;
+    padding: 8px 18px; border-radius: 18px;
+    font-family: inherit; font-size: 13px; font-weight: bold;
+    cursor: pointer; transition: transform 0.1s, background 0.15s;
+  }
+  button.action:hover { background: #ffe199; transform: translateY(-1px); }
+  button.action.ghost {
+    background: transparent; color: var(--soft);
+    border: 1px solid var(--pill-border);
+  }
+  button.action.ghost:hover { color: var(--ink); border-color: var(--gold); }
+
+  @media (max-width: 900px) {
+    #scene-wrap { flex-direction: column; }
+    .pane + .pane { border-left: none; border-top: 1px solid var(--pill-border); }
+    #pane-indicator { max-width: 100%; flex: 0 0 auto; padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="header-left">
+      <a href="index.html" class="home-link">← overview</a>
+      <h1><b>Curl</b> · ∇ × F · vector field explorer</h1>
+    </div>
+    <div class="presets">
+      <button data-preset="rotation" class="active">rotation · F = (−y, x)</button>
+      <button data-preset="clockwise">clockwise · F = (y, −x)</button>
+      <button data-preset="shear">shear · F = (y, 0)</button>
+      <button data-preset="radial">radial (no curl) · F = (x, y)</button>
+      <button data-preset="saddle_vortex">saddle vortex</button>
+      <button data-preset="custom">✏️ custom</button>
+    </div>
+  </header>
+
+  <div id="customForm">
+    <label>P(x, y) =</label>
+    <input id="customP" type="text" value="-y" placeholder="e.g. -y">
+    <label>Q(x, y) =</label>
+    <input id="customQ" type="text" value="x" placeholder="e.g. x">
+    <button id="customApply">apply</button>
+    <span id="customError"></span>
+    <span id="customHelp">use <b>x</b> and <b>y</b> &nbsp;·&nbsp; functions: sin, cos, tan, sqrt, log, exp, abs &nbsp;·&nbsp; constants: pi, e &nbsp;·&nbsp; ^ for power</span>
+  </div>
+
+  <div id="scene-wrap">
+    <!-- Left pane: vector field + heatmap + draggable probe -->
+    <div class="pane" id="pane-field">
+      <canvas id="canvas-field"></canvas>
+      <div class="pane-label">vector field · drag the wheel</div>
+      <div class="overlay" id="overlay-main">
+        <h2><b>Curl · ∇ × F</b></h2>
+        <div class="formula" id="ov-formula-curl"></div>
+        <div class="formula" id="ov-field-formula" style="color:var(--ink); margin-top:4px;"></div>
+        <div class="probe-stats">
+          <div class="lbl-soft">probe position (drag the wheel)</div>
+          <div class="row"><span>position</span><span class="val-gold" id="ov-probe-xy">(1.00, 0.50)</span></div>
+          <div class="row"><span>curl at probe</span><span class="val-gold" id="ov-curl-val">2.000</span></div>
+          <div class="interp" id="ov-interp">The wheel spins counterclockwise here.</div>
+        </div>
+        <div class="legend">
+          <div><span class="swatch" style="background:#d94f3d;"></span>positive curl — counterclockwise spin</div>
+          <div><span class="swatch" style="background:#3a6bc4;"></span>negative curl — clockwise spin</div>
+          <div><span class="swatch" style="background:var(--soft); opacity:0.5;"></span>arrows — field direction (gray)</div>
+          <div><span class="swatch" style="background:var(--gold); border-radius:50%;"></span>paddle-wheel probe — drag me!</div>
+        </div>
+      </div>
+      <div class="preset-caption" id="preset-caption">Pure rotation — same spin everywhere.</div>
+    </div>
+
+    <!-- Right pane: big spinning indicator wheel -->
+    <div class="pane" id="pane-indicator">
+      <div class="pane-label" style="left:50%;transform:translateX(-50%);">zoom: what the probe feels</div>
+      <canvas id="indicator-canvas" width="220" height="220"></canvas>
+      <div class="indicator-label">
+        <div class="curl-val" id="ind-curl-val">curl = 2.000</div>
+        <div class="curl-desc" id="ind-curl-desc">at probe (1.00, 0.50)</div>
+        <div class="arc-desc ccw" id="ind-arc-desc">↺ counterclockwise</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span class="lbl">Drag the paddle wheel on the left to feel the curl at any point.</span>
+    <button class="action ghost" id="btn-reset-probe">↺ reset probe</button>
+    <button class="action ghost" id="btn-pause">⏸ pause spin</button>
+  </footer>
+</div>
+
+<script>
+// =============================================================================
+// HELPERS
+// =============================================================================
+function prettyNumber(v) {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 0.001 && a < 10000) {
+    // Fixed notation, reasonable precision
+    const d = a < 10 ? 3 : a < 100 ? 2 : 1;
+    return v.toFixed(d);
+  }
+  // Scientific notation with HTML superscript
+  const exp = Math.floor(Math.log10(a));
+  const mant = v / Math.pow(10, exp);
+  return `${mant.toFixed(2)} × 10<sup>${exp}</sup>`;
+}
+
+function renderMath(el, latex, displayMode) {
+  if (!el) return;
+  if (window.katex) {
+    try {
+      katex.render(latex, el, { throwOnError: false, displayMode: !!displayMode });
+      return;
+    } catch (_) {}
+  }
+  el.textContent = latex;
+}
+
+// =============================================================================
+// COMPILE EXPRESSION
+// =============================================================================
+function compileExpr(raw) {
+  if (!raw || !String(raw).trim()) throw new Error('expression is empty');
+  let s = String(raw).trim().toLowerCase();
+  s = s.replace(/π/g, 'pi').replace(/\^/g, '**');
+  s = s.replace(/(\d)(?!\s*e[\d+\-])([a-zA-Z(])/g, '$1*$2');
+  s = s.replace(/(\))(\s*[\da-zA-Z(])/g, '$1*$2');
+  s = s.replace(/\bpi\b/g, 'PI').replace(/\be\b/g, 'E');
+  if (/[=;]/.test(s)) throw new Error('use a single expression — no = or ;');
+  let fn;
+  try { fn = new Function('x', 'y', `with (Math) { return (${s}); }`); }
+  catch (e) { throw new Error('syntax error — check parens and operators'); }
+  for (const [tx, ty] of [[0.5, 0.3], [-0.5, 1], [1, -1]]) {
+    const v = fn(tx, ty);
+    if (typeof v !== 'number' || !isFinite(v)) throw new Error(`gives a non-number at (x=${tx}, y=${ty})`);
+  }
+  return fn;
+}
+
+// =============================================================================
+// PRESETS
+// =============================================================================
+const PRESETS = {
+  rotation: {
+    label: 'rotation',
+    fieldLabel: 'F = (−y, x)',
+    P: (x, y) => -y,
+    Q: (x, y) => x,
+    curlAnalytic: (x, y) => 2,
+    caption: 'Pure rotation — same spin everywhere.',
+  },
+  clockwise: {
+    label: 'clockwise',
+    fieldLabel: 'F = (y, −x)',
+    P: (x, y) => y,
+    Q: (x, y) => -x,
+    curlAnalytic: (x, y) => -2,
+    caption: 'Opposite spin — curl is negative.',
+  },
+  shear: {
+    label: 'shear',
+    fieldLabel: 'F = (y, 0)',
+    P: (x, y) => y,
+    Q: (x, y) => 0,
+    curlAnalytic: (x, y) => -1,
+    caption: 'Top moves right, bottom moves left — there\'s spin even though arrows don\'t curl.',
+  },
+  radial: {
+    label: 'radial',
+    fieldLabel: 'F = (x, y)',
+    P: (x, y) => x,
+    Q: (x, y) => y,
+    curlAnalytic: (x, y) => 0,
+    caption: 'Pure outflow — pretty, but no rotation.',
+  },
+  saddle_vortex: {
+    label: 'saddle vortex',
+    fieldLabel: 'F = (sin x, cos y)',
+    P: (x, y) => Math.sin(x),
+    Q: (x, y) => Math.cos(y),
+    curlAnalytic: null,  // will use numeric
+    caption: 'Spin varies across the plane — drag the wheel to feel it.',
+  },
+  custom: {
+    label: 'custom',
+    fieldLabel: 'F = (P, Q)',
+    P: (x, y) => -y,
+    Q: (x, y) => x,
+    curlAnalytic: null,
+    caption: 'Your custom field.',
+  },
+};
+let activeKey = 'rotation';
+
+// =============================================================================
+// MATH — CURL
+// =============================================================================
+const DOMAIN = 3;  // x,y ∈ [-3, 3]
+
+function curlNumeric(P, Q, x, y, h = 1e-4) {
+  const dQdx = (Q(x + h, y) - Q(x - h, y)) / (2 * h);
+  const dPdy = (P(x, y + h) - P(x, y - h)) / (2 * h);
+  return dQdx - dPdy;
+}
+
+function curlAt(preset, x, y) {
+  if (preset.curlAnalytic) return preset.curlAnalytic(x, y);
+  return curlNumeric(preset.P, preset.Q, x, y);
+}
+
+// =============================================================================
+// HEATMAP — precomputed on a grid, bilinear-interpolated per pixel
+// =============================================================================
+const HMAP_N = 200;
+let heatmapData = null;  // { grid: Float32Array, min, max }
+
+function buildHeatmapData(preset) {
+  const N = HMAP_N;
+  const grid = new Float32Array(N * N);
+  let mn = Infinity, mx = -Infinity;
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = -DOMAIN + (2 * DOMAIN) * i / (N - 1);
+      const y = -DOMAIN + (2 * DOMAIN) * j / (N - 1);
+      let v = curlAt(preset, x, y);
+      if (!isFinite(v)) v = 0;
+      grid[j * N + i] = v;
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+  }
+  heatmapData = { grid, min: mn, max: mx };
+}
+
+function heatmapBilerp(wx, wy) {
+  // world (wx,wy) → grid value via bilinear interpolation
+  if (!heatmapData) return 0;
+  const N = HMAP_N;
+  const fi = (wx + DOMAIN) / (2 * DOMAIN) * (N - 1);
+  const fj = (wy + DOMAIN) / (2 * DOMAIN) * (N - 1);
+  const i0 = Math.max(0, Math.min(N - 2, Math.floor(fi)));
+  const j0 = Math.max(0, Math.min(N - 2, Math.floor(fj)));
+  const u = fi - i0, v = fj - j0;
+  const g = heatmapData.grid;
+  return (1-u)*(1-v)*g[j0*N+i0] + u*(1-v)*g[j0*N+i0+1] +
+         (1-u)*v*g[(j0+1)*N+i0] + u*v*g[(j0+1)*N+i0+1];
+}
+
+// Diverging colormap: blue(-) → neutral(0) → red(+)
+// t ∈ [-1, 1]
+function curlColor(t) {
+  t = Math.max(-1, Math.min(1, t));
+  if (t >= 0) {
+    // 0→1: neutral #1a1e24 → red #d94f3d
+    const r0=0x1a, g0=0x1e, b0=0x24;
+    const r1=0xd9, g1=0x4f, b1=0x3d;
+    return [
+      Math.round(r0 + (r1-r0)*t),
+      Math.round(g0 + (g1-g0)*t),
+      Math.round(b0 + (b1-b0)*t),
+    ];
+  } else {
+    // -1→0: blue #3a6bc4 → neutral
+    const r0=0x3a, g0=0x6b, b0=0xc4;
+    const r1=0x1a, g1=0x1e, b1=0x24;
+    const s = -t;  // 0..1
+    return [
+      Math.round(r1 + (r0-r1)*s),
+      Math.round(g1 + (g0-g1)*s),
+      Math.round(b1 + (b0-b1)*s),
+    ];
+  }
+}
+
+// =============================================================================
+// CANVAS SETUP
+// =============================================================================
+const fieldCanvas = document.getElementById('canvas-field');
+const fCtx = fieldCanvas.getContext('2d');
+const indicatorCanvas = document.getElementById('indicator-canvas');
+const iCtx = indicatorCanvas.getContext('2d');
+
+// Probe state
+let probeX = 1.0, probeY = 0.5;
+let probeDragging = false;
+let animPaused = false;
+let bladeAngle = 0;  // probe blade angle (radians)
+let bigAngle = 0;    // indicator big wheel angle
+let lastRAF = 0;
+
+// World ↔ canvas coordinate transforms for the field canvas
+function worldToCanvas(wx, wy) {
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  const cx = (wx + DOMAIN) / (2 * DOMAIN) * W;
+  const cy = H - (wy + DOMAIN) / (2 * DOMAIN) * H;
+  return [cx, cy];
+}
+function canvasToWorld(cx, cy) {
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  const wx = cx / W * (2 * DOMAIN) - DOMAIN;
+  const wy = (H - cy) / H * (2 * DOMAIN) - DOMAIN;
+  return [wx, wy];
+}
+
+// =============================================================================
+// DRAWING
+// =============================================================================
+let heatmapImageData = null;  // cached ImageData for the background heatmap
+
+function buildHeatmapImageData() {
+  if (!heatmapData) return;
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  const img = fCtx.createImageData(W, H);
+  const { min, max } = heatmapData;
+  const absMax = Math.max(Math.abs(min), Math.abs(max), 1e-9);
+
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const [wx, wy] = canvasToWorld(px + 0.5, py + 0.5);
+      const v = heatmapBilerp(wx, wy);
+      const t = Math.max(-1, Math.min(1, v / absMax));
+      const [r, g, b] = curlColor(t);
+      const idx = (py * W + px) * 4;
+      img.data[idx]   = r;
+      img.data[idx+1] = g;
+      img.data[idx+2] = b;
+      img.data[idx+3] = 255;
+    }
+  }
+  heatmapImageData = img;
+}
+
+function drawArrows(preset) {
+  const N = 16;
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  const cellW = W / N, cellH = H / N;
+  const halfCell = Math.min(cellW, cellH) * 0.5 * 0.48;
+
+  // Find max magnitude for normalization
+  let maxMag = 0;
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const wx = -DOMAIN + (2 * DOMAIN) * (i + 0.5) / N;
+      const wy = -DOMAIN + (2 * DOMAIN) * (j + 0.5) / N;
+      const p = preset.P(wx, wy), q = preset.Q(wx, wy);
+      const mag = Math.sqrt(p*p + q*q);
+      if (isFinite(mag) && mag > maxMag) maxMag = mag;
+    }
+  }
+  if (maxMag < 1e-12) maxMag = 1;
+
+  fCtx.strokeStyle = 'rgba(150,162,175,0.65)';
+  fCtx.lineWidth = 1;
+
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const wx = -DOMAIN + (2 * DOMAIN) * (i + 0.5) / N;
+      const wy = -DOMAIN + (2 * DOMAIN) * (j + 0.5) / N;
+      let p = preset.P(wx, wy), q = preset.Q(wx, wy);
+      if (!isFinite(p) || !isFinite(q)) continue;
+      const mag = Math.sqrt(p*p + q*q);
+      if (mag < 1e-12) continue;
+      const scale = (mag / maxMag) * halfCell;
+      const ux = p / mag, uy = q / mag;
+
+      const [cx, cy] = worldToCanvas(wx, wy);
+      // Note: canvas y is inverted vs world y
+      const ex = cx + ux * scale;
+      const ey = cy - uy * scale;  // subtract because canvas y flips
+      const sx = cx - ux * scale * 0.5;
+      const sy = cy + uy * scale * 0.5;
+
+      fCtx.beginPath();
+      fCtx.moveTo(sx, sy);
+      fCtx.lineTo(ex, ey);
+      // arrowhead
+      const headLen = scale * 0.32;
+      const angle = Math.atan2(-(ey - sy), ex - sx);
+      fCtx.lineTo(
+        ex - headLen * Math.cos(angle - 0.42),
+        ey - headLen * Math.sin(angle - 0.42)  // note: no y-flip needed here since angle is already in canvas-space
+      );
+      fCtx.moveTo(ex, ey);
+      fCtx.lineTo(
+        ex - headLen * Math.cos(angle + 0.42),
+        ey - headLen * Math.sin(angle + 0.42)
+      );
+      fCtx.stroke();
+    }
+  }
+}
+
+function drawAxes() {
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  fCtx.strokeStyle = 'rgba(90,100,112,0.5)';
+  fCtx.lineWidth = 1;
+
+  // x-axis
+  const [ax, ay] = worldToCanvas(-DOMAIN, 0);
+  const [bx, by] = worldToCanvas(DOMAIN, 0);
+  fCtx.beginPath(); fCtx.moveTo(ax, ay); fCtx.lineTo(bx, by); fCtx.stroke();
+
+  // y-axis
+  const [cx2, cy2] = worldToCanvas(0, -DOMAIN);
+  const [dx, dy] = worldToCanvas(0, DOMAIN);
+  fCtx.beginPath(); fCtx.moveTo(cx2, cy2); fCtx.lineTo(dx, dy); fCtx.stroke();
+}
+
+function drawPaddleWheel(angle) {
+  const [cx, cy] = worldToCanvas(probeX, probeY);
+  const W = fieldCanvas.width;
+  const r = W / 16 * 0.36;  // blade half-length, proportional to arrow cell
+  const N_BLADES = 4;
+  const GOLD = '#ffd166';
+  const ROSE = '#ff7eb6';
+
+  // Shadow/glow
+  fCtx.save();
+  fCtx.shadowColor = 'rgba(255,209,102,0.5)';
+  fCtx.shadowBlur = 8;
+
+  // Draw blades
+  for (let b = 0; b < N_BLADES; b++) {
+    const a = angle + (b * Math.PI * 2) / N_BLADES;
+    const color = b % 2 === 0 ? GOLD : ROSE;
+    fCtx.strokeStyle = color;
+    fCtx.lineWidth = 2.5;
+    fCtx.beginPath();
+    fCtx.moveTo(cx, cy);
+    fCtx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    fCtx.stroke();
+  }
+  fCtx.restore();
+
+  // Center dot
+  fCtx.beginPath();
+  fCtx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+  fCtx.fillStyle = GOLD;
+  fCtx.shadowColor = 'rgba(255,209,102,0.8)';
+  fCtx.shadowBlur = 10;
+  fCtx.fill();
+  fCtx.shadowBlur = 0;
+}
+
+function drawFieldCanvas(preset, dt) {
+  if (!heatmapImageData) return;
+  const W = fieldCanvas.width, H = fieldCanvas.height;
+  fCtx.putImageData(heatmapImageData, 0, 0);
+  drawAxes();
+  drawArrows(preset);
+  drawPaddleWheel(bladeAngle);
+}
+
+// =============================================================================
+// INDICATOR WHEEL (right pane)
+// =============================================================================
+function drawIndicator(curlVal) {
+  const W = indicatorCanvas.width, H = indicatorCanvas.height;
+  iCtx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H / 2 - 10;
+  const R = Math.min(W, H) * 0.35;
+
+  // Background circle
+  iCtx.beginPath();
+  iCtx.arc(cx, cy, R, 0, Math.PI * 2);
+  iCtx.strokeStyle = 'rgba(90,100,112,0.3)';
+  iCtx.lineWidth = 1;
+  iCtx.stroke();
+
+  // Hub
+  iCtx.beginPath();
+  iCtx.arc(cx, cy, 7, 0, Math.PI * 2);
+  iCtx.fillStyle = '#ffd166';
+  iCtx.shadowColor = 'rgba(255,209,102,0.7)';
+  iCtx.shadowBlur = 10;
+  iCtx.fill();
+  iCtx.shadowBlur = 0;
+
+  // 4 blades
+  const N_BLADES = 4;
+  const GOLD = '#ffd166';
+  const ROSE = '#ff7eb6';
+  for (let b = 0; b < N_BLADES; b++) {
+    const a = bigAngle + (b * Math.PI * 2) / N_BLADES;
+    const color = b % 2 === 0 ? GOLD : ROSE;
+    // Blade as a thin rounded rectangle
+    iCtx.save();
+    iCtx.translate(cx, cy);
+    iCtx.rotate(a);
+    iCtx.beginPath();
+    const bw = R * 0.15, bh = R * 0.88;
+    iCtx.roundRect(-bw / 2, 7, bw, bh - 7, bw / 2);
+    iCtx.fillStyle = color;
+    iCtx.globalAlpha = 0.85;
+    iCtx.shadowColor = color;
+    iCtx.shadowBlur = 6;
+    iCtx.fill();
+    iCtx.restore();
+  }
+
+  // Arc direction indicator
+  const absC = Math.abs(curlVal);
+  if (absC > 0.05) {
+    const arcR = R * 1.22;
+    const arcLen = Math.min(Math.PI * 1.4, Math.PI * 0.4 + absC * 0.2);
+    const arcColor = curlVal > 0 ? '#ff7eb6' : '#6aa9ff';
+    iCtx.beginPath();
+    if (curlVal > 0) {
+      // CCW — arc from right, going counter-clockwise in canvas coords (which means standard CCW)
+      iCtx.arc(cx, cy, arcR, -0.3, -0.3 + arcLen, false);
+    } else {
+      iCtx.arc(cx, cy, arcR, -0.3, -0.3 + arcLen, false);
+    }
+    iCtx.strokeStyle = arcColor;
+    iCtx.lineWidth = 3;
+    iCtx.setLineDash([]);
+    iCtx.stroke();
+    // Arrowhead at end of arc
+    const endAngle = curlVal > 0 ? (-0.3 + arcLen) : (-0.3 + arcLen);
+    const direction = curlVal > 0 ? 1 : -1;
+    const aex = cx + arcR * Math.cos(endAngle);
+    const aey = cy + arcR * Math.sin(endAngle);
+    const tangAngle = endAngle + (direction * Math.PI / 2);
+    iCtx.beginPath();
+    iCtx.moveTo(aex, aey);
+    iCtx.lineTo(aex - 9 * Math.cos(tangAngle - 0.5), aey - 9 * Math.sin(tangAngle - 0.5));
+    iCtx.moveTo(aex, aey);
+    iCtx.lineTo(aex - 9 * Math.cos(tangAngle + 0.5), aey - 9 * Math.sin(tangAngle + 0.5));
+    iCtx.strokeStyle = arcColor;
+    iCtx.lineWidth = 2.5;
+    iCtx.stroke();
+  }
+}
+
+// =============================================================================
+// STATE UPDATE
+// =============================================================================
+function updateOverlay(curlVal) {
+  const xStr = probeX >= 0 ? probeX.toFixed(2) : probeX.toFixed(2);
+  const yStr = probeY >= 0 ? probeY.toFixed(2) : probeY.toFixed(2);
+
+  document.getElementById('ov-probe-xy').textContent = `(${xStr}, ${yStr})`;
+
+  const valEl = document.getElementById('ov-curl-val');
+  const isNeg = curlVal < -0.01;
+  const isPos = curlVal > 0.01;
+  valEl.innerHTML = prettyNumber(curlVal);
+  valEl.className = 'val-gold';
+  if (isNeg) valEl.className = 'val-rose';
+  else if (isPos) valEl.className = 'val-gold';
+  else valEl.className = 'val-soft';
+
+  const interp = document.getElementById('ov-interp');
+  if (Math.abs(curlVal) < 0.05) {
+    interp.textContent = "No spin here — the wheel stays still.";
+    interp.style.color = 'var(--soft)';
+  } else if (curlVal > 0) {
+    interp.textContent = "The wheel spins counterclockwise here.";
+    interp.style.color = 'var(--rose)';
+  } else {
+    interp.textContent = "The wheel spins clockwise here.";
+    interp.style.color = 'var(--blue)';
+  }
+
+  // Indicator panel
+  const indVal = document.getElementById('ind-curl-val');
+  indVal.innerHTML = `curl = ${prettyNumber(curlVal)}`;
+  indVal.className = 'curl-val' + (curlVal < -0.05 ? ' neg' : '');
+
+  document.getElementById('ind-curl-desc').textContent = `at probe (${xStr}, ${yStr})`;
+
+  const arcEl = document.getElementById('ind-arc-desc');
+  if (Math.abs(curlVal) < 0.05) {
+    arcEl.textContent = '— no rotation';
+    arcEl.className = 'arc-desc zero';
+  } else if (curlVal > 0) {
+    arcEl.textContent = '↺ counterclockwise';
+    arcEl.className = 'arc-desc ccw';
+  } else {
+    arcEl.textContent = '↻ clockwise';
+    arcEl.className = 'arc-desc cw';
+  }
+}
+
+function updateFieldFormula(preset) {
+  const el = document.getElementById('ov-field-formula');
+  el.textContent = preset.fieldLabel;
+}
+
+// =============================================================================
+// RESIZE
+// =============================================================================
+function resizeFieldCanvas() {
+  const pane = document.getElementById('pane-field');
+  const W = Math.max(120, pane.clientWidth);
+  const H = Math.max(120, pane.clientHeight);
+  fieldCanvas.width = W;
+  fieldCanvas.height = H;
+  heatmapImageData = null;  // invalidate
+  buildHeatmapImageData();
+}
+
+window.addEventListener('resize', () => {
+  resizeFieldCanvas();
+});
+
+// =============================================================================
+// ANIMATION LOOP
+// =============================================================================
+function tick(ts) {
+  const dt = Math.min(0.05, (ts - lastRAF) / 1000);
+  lastRAF = ts;
+
+  const preset = PRESETS[activeKey];
+  const curlVal = curlAt(preset, probeX, probeY);
+
+  if (!animPaused) {
+    // ω = clamp(curl/2, -3, 3) rad/sec
+    const omega = Math.max(-3, Math.min(3, curlVal / 2));
+    bladeAngle += omega * dt;
+    bigAngle -= omega * dt;  // indicator spins opposite canvas-y flip
+  }
+
+  // Draw
+  if (!heatmapImageData) buildHeatmapImageData();
+  drawFieldCanvas(preset, dt);
+  drawIndicator(curlVal);
+  updateOverlay(curlVal);
+
+  requestAnimationFrame(tick);
+}
+
+// =============================================================================
+// INPUT — POINTER DRAG
+// =============================================================================
+function setProbeFromPointer(ev) {
+  const rect = fieldCanvas.getBoundingClientRect();
+  const px = (ev.clientX - rect.left) * (fieldCanvas.width / rect.width);
+  const py = (ev.clientY - rect.top) * (fieldCanvas.height / rect.height);
+  let [wx, wy] = canvasToWorld(px, py);
+  wx = Math.max(-DOMAIN, Math.min(DOMAIN, wx));
+  wy = Math.max(-DOMAIN, Math.min(DOMAIN, wy));
+  probeX = wx;
+  probeY = wy;
+}
+
+fieldCanvas.addEventListener('pointerdown', e => {
+  probeDragging = true;
+  fieldCanvas.setPointerCapture(e.pointerId);
+  setProbeFromPointer(e);
+});
+fieldCanvas.addEventListener('pointermove', e => {
+  if (probeDragging) setProbeFromPointer(e);
+});
+fieldCanvas.addEventListener('pointerup', e => {
+  probeDragging = false;
+  try { fieldCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+});
+
+// =============================================================================
+// CONTROLS
+// =============================================================================
+document.getElementById('btn-reset-probe').addEventListener('click', () => {
+  probeX = 1.0; probeY = 0.5;
+});
+document.getElementById('btn-pause').addEventListener('click', function() {
+  animPaused = !animPaused;
+  this.textContent = animPaused ? '▶ resume spin' : '⏸ pause spin';
+});
+
+document.querySelectorAll('.presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeKey = btn.dataset.preset;
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b === btn)
+    );
+    const isCustom = activeKey === 'custom';
+    document.getElementById('customForm').classList.toggle('shown', isCustom);
+    const p = PRESETS[activeKey];
+    document.getElementById('preset-caption').textContent = p.caption;
+    updateFieldFormula(p);
+    heatmapData = null;
+    buildHeatmapData(p);
+    heatmapImageData = null;
+    buildHeatmapImageData();
+  });
+});
+
+document.getElementById('customApply').addEventListener('click', applyCustom);
+['customP', 'customQ'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyCustom();
+  });
+});
+
+function applyCustom() {
+  const err = document.getElementById('customError');
+  err.textContent = '';
+  let P, Q;
+  try { P = compileExpr(document.getElementById('customP').value); }
+  catch (e) { err.textContent = 'P: ' + e.message; return; }
+  try { Q = compileExpr(document.getElementById('customQ').value); }
+  catch (e) { err.textContent = 'Q: ' + e.message; return; }
+  const pRaw = document.getElementById('customP').value.trim();
+  const qRaw = document.getElementById('customQ').value.trim();
+  PRESETS.custom = {
+    label: 'custom',
+    fieldLabel: `F = (${pRaw}, ${qRaw})`,
+    P, Q,
+    curlAnalytic: null,
+    caption: 'Your custom field.',
+  };
+  if (activeKey !== 'custom') {
+    activeKey = 'custom';
+    document.querySelectorAll('.presets button').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === 'custom')
+    );
+    document.getElementById('customForm').classList.add('shown');
+  }
+  updateFieldFormula(PRESETS.custom);
+  document.getElementById('preset-caption').textContent = PRESETS.custom.caption;
+  heatmapData = null;
+  buildHeatmapData(PRESETS.custom);
+  heatmapImageData = null;
+  buildHeatmapImageData();
+}
+
+// =============================================================================
+// SELF-TEST
+// =============================================================================
+(() => {
+  const FIELD_ROT = { P: (x, y) => -y, Q: (x, y) => x, curlAnalytic: null };
+  const c_rot = curlNumeric(FIELD_ROT.P, FIELD_ROT.Q, 0.3, -0.7);
+  console.assert(Math.abs(c_rot - 2) < 1e-3,
+    `[curl] rotation test failed: got ${c_rot}, expected 2`);
+
+  const FIELD_RAD = { P: (x, y) => x, Q: (x, y) => y, curlAnalytic: null };
+  const c_rad = curlNumeric(FIELD_RAD.P, FIELD_RAD.Q, 1, 1);
+  console.assert(Math.abs(c_rad) < 1e-3,
+    `[curl] radial test failed: got ${c_rad}, expected 0`);
+
+  const FIELD_CW = { P: (x, y) => y, Q: (x, y) => -x, curlAnalytic: null };
+  const c_cw = curlNumeric(FIELD_CW.P, FIELD_CW.Q, 0.5, -0.5);
+  console.assert(Math.abs(c_cw - (-2)) < 1e-3,
+    `[curl] clockwise test failed: got ${c_cw}, expected -2`);
+
+  console.log('[curl] all 3 tests passed');
+})();
+
+// =============================================================================
+// BOOT
+// =============================================================================
+// Render KaTeX formula
+window.addEventListener('load', () => {
+  renderMath(
+    document.getElementById('ov-formula-curl'),
+    '\\operatorname{curl}\\,F = \\dfrac{\\partial Q}{\\partial x} - \\dfrac{\\partial P}{\\partial y}',
+    false
+  );
+});
+
+// Also try right away in case KaTeX already loaded
+renderMath(
+  document.getElementById('ov-formula-curl'),
+  '\\operatorname{curl}\\,F = \\dfrac{\\partial Q}{\\partial x} - \\dfrac{\\partial P}{\\partial y}',
+  false
+);
+
+// Initial build
+const initialPreset = PRESETS[activeKey];
+updateFieldFormula(initialPreset);
+document.getElementById('preset-caption').textContent = initialPreset.caption;
+buildHeatmapData(initialPreset);
+resizeFieldCanvas();  // sets canvas size AND calls buildHeatmapImageData
+
+requestAnimationFrame(ts => {
+  lastRAF = ts;
+  requestAnimationFrame(tick);
+});
+
+// Inspection hooks
+window.__state = () => ({ probeX, probeY, activeKey, animPaused, bladeAngle });
+window.__rebuild = () => {
+  buildHeatmapData(PRESETS[activeKey]);
+  heatmapImageData = null;
+  buildHeatmapImageData();
+};
+window.__curlAt = (x, y) => curlAt(PRESETS[activeKey], x, y);
+</script>
+</body>
+</html>
